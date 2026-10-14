@@ -48,7 +48,6 @@ import { HostNotesModal } from './HostNotesModal';
 import { DistroIcon } from './DistroIcon';
 import { ProcessManagerModal } from './ProcessManagerModal';
 import { AICopilotPanel } from './AICopilotPanel';
-import { SessionThemeDropdown } from './SessionThemeDropdown';
 import { SessionRecording } from '../../domain/types';
 
 import { checkDestructiveCommand, DestructiveCommandAlert } from '../utils/command-safety';
@@ -1033,12 +1032,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <span>REC</span>
             </button>
           )}
-
-          {/* Inbuilt Themes Dropdown for this Session */}
-          <SessionThemeDropdown
-            currentThemeId={sessionThemeId}
-            onSelectTheme={handleSelectSessionTheme}
-          />
 
           {/* Unified Host Tools Dropdown Menu */}
           <div className="relative shrink-0 z-40" ref={toolsDropdownRef}>

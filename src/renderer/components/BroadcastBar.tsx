@@ -226,8 +226,8 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
           )}
         </div>
 
-        {/* Quick Broadcast Input Box or Session Theme Selector */}
-        {isBroadcasting ? (
+        {/* Quick Broadcast Input Box */}
+        {isBroadcasting && (
           <div className="flex items-center gap-2 flex-1 max-w-xl mx-4">
             <div className="relative flex-1">
               <input
@@ -250,15 +250,16 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
               <span>Send All</span>
             </button>
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">Session Theme:</span>
-            <SessionThemeDropdown
-              currentThemeId={activeThemeId}
-              onSelectTheme={handleSelectTheme}
-            />
-          </div>
         )}
+
+        {/* Inbuilt Session Theme Selector (Kept on the session bar) */}
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">Session Theme:</span>
+          <SessionThemeDropdown
+            currentThemeId={activeThemeId}
+            onSelectTheme={handleSelectTheme}
+          />
+        </div>
       </div>
 
       {/* Target Selector Dropdown / Tray */}
