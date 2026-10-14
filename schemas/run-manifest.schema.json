@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AutomationRunManifest",
+  "description": "DgodTerm Ansible Automation Run Manifest schema",
+  "type": "object",
+  "required": [
+    "run_id",
+    "requested_by",
+    "requested_at",
+    "project_id",
+    "playbook_path",
+    "source_revision",
+    "inventory_source",
+    "resolved_targets",
+    "extra_vars_digest",
+    "execution_image_digest",
+    "ansible_core_version",
+    "policy_decision",
+    "rollout",
+    "manifest_hash"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "requested_by": {
+      "type": "string"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "playbook_path": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "inventory_source": {
+      "type": "string"
+    },
+    "resolved_targets": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limit": {
+      "type": ["string", "null"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "extra_vars_digest": {
+      "type": "string"
+    },
+    "execution_image_digest": {
+      "type": "string"
+    },
+    "ansible_core_version": {
+      "type": "string"
+    },
+    "collection_versions": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "policy_decision": {
+      "type": "string",
+      "enum": ["allow", "deny", "approval_required"]
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["actor", "approved_at", "rationale", "scope"],
+        "properties": {
+          "actor": { "type": "string" },
+          "approved_at": { "type": "string", "format": "date-time" },
+          "rationale": { "type": "string" },
+          "scope": { "type": "string" }
+        }
+      }
+    },
+    "rollout": {
+      "type": "object",
+      "required": ["serial", "failure_threshold", "max_run_minutes"],
+      "properties": {
+        "serial": { "type": "integer", "minimum": 1 },
+        "canary_count": { "type": "integer", "minimum": 0 },
+        "failure_threshold": { "type": "integer", "minimum": 1 },
+        "max_run_minutes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "change_reference": {
+      "type": ["string", "null"]
+    },
+    "started_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "per_host_results": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "duration_ms", "summary"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["success", "failed", "changed", "skipped", "unreachable"]
+          },
+          "duration_ms": { "type": "integer" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "manifest_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

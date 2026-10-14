@@ -1,0 +1,39 @@
+{
+  "policy_id": "production-automation-v1",
+  "name": "Production Tier Policy",
+  "description": "High-assurance governance policy enforcing separation of duties, change references, and serial execution.",
+  "scope": {
+    "environments": ["production", "pci-dss", "sox"]
+  },
+  "ssh": {
+    "host_key_mode": "strict",
+    "allow_legacy_algorithms": false,
+    "agent_forwarding": "disabled",
+    "x11_forwarding": "disabled",
+    "supported_kex": [
+      "curve25519-sha256",
+      "curve25519-sha256@libssh.org"
+    ],
+    "supported_ciphers": [
+      "chacha20-poly1305@openssh.com",
+      "aes256-gcm@openssh.com"
+    ]
+  },
+  "automation": {
+    "max_targets_without_approval": 1,
+    "production_requires_approval": true,
+    "require_change_reference": true,
+    "self_approval": false,
+    "default_serial": 1,
+    "failure_threshold": 1,
+    "max_run_minutes": 30
+  },
+  "credentials": {
+    "persistent_passwords": false,
+    "require_short_lived_certificates": true
+  },
+  "logging": {
+    "secrets": "never",
+    "terminal_recording": "disabled"
+  }
+}

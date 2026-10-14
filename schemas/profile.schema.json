@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConnectionProfile",
+  "description": "DgodTerm Secure SSH Connection Profile schema",
+  "type": "object",
+  "required": [
+    "id",
+    "schema_version",
+    "display_name",
+    "hostname",
+    "port",
+    "username",
+    "created_at",
+    "updated_at",
+    "created_by"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "hostname": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 22
+    },
+    "username": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "folder_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "jump_host_profile_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "auth_reference": {
+      "type": ["object", "null"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["os_keychain", "ssh_agent", "key_file_reference", "certificate", "secret_manager", "transient_prompt"]
+        },
+        "reference_id": {
+          "type": "string"
+        },
+        "account_or_key_label": {
+          "type": ["string", "null"]
+        },
+        "key_path": {
+          "type": ["string", "null"]
+        },
+        "certificate_path": {
+          "type": ["string", "null"]
+        },
+        "last_used_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      },
+      "required": ["kind", "reference_id"],
+      "additionalProperties": false
+    },
+    "host_trust_policy_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "ssh_options": {
+      "type": "object",
+      "properties": {
+        "keepalive_interval": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 30
+        },
+        "agent_forwarding": {
+          "type": "boolean",
+          "default": false
+        },
+        "x11_forwarding": {
+          "type": "boolean",
+          "default": false
+        },
+        "terminal_type": {
+          "type": "string",
+          "default": "xterm-256color"
+        },
+        "ciphers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "kex_algorithms": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "is_favorite": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_connected_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Insightful comments and operational notes about the host"
+    },
+    "os_flavor": {
+      "type": ["string", "null"],
+      "description": "Detected or configured Linux distribution flavour (e.g. ubuntu, debian, oracle, alpine, rhel)"
+    },
+    "os_name": {
+      "type": ["string", "null"],
+      "description": "Pretty display name of the detected OS release"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,167 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:b5a4da54-035b-40f7-aa10-11c1a56deb3b",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-12T20:37:10.332Z",
+    "component": {
+      "type": "application",
+      "name": "DgodTerm",
+      "version": "1.0.0",
+      "description": "Secure SSH and Ansible Automation Desktop Client"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "@types/qrcode",
+      "version": "1.5.6",
+      "purl": "pkg:npm/@types/qrcode@1.5.6"
+    },
+    {
+      "type": "library",
+      "name": "@types/react",
+      "version": "19.3.0",
+      "purl": "pkg:npm/@types/react@19.3.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/react-dom",
+      "version": "19.3.0",
+      "purl": "pkg:npm/@types/react-dom@19.3.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/ssh2",
+      "version": "1.15.6",
+      "purl": "pkg:npm/@types/ssh2@1.15.6"
+    },
+    {
+      "type": "library",
+      "name": "@types/uuid",
+      "version": "10.0.0",
+      "purl": "pkg:npm/@types/uuid@10.0.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/ws",
+      "version": "8.18.2",
+      "purl": "pkg:npm/@types/ws@8.18.2"
+    },
+    {
+      "type": "library",
+      "name": "@vitejs/plugin-react",
+      "version": "6.1.2",
+      "purl": "pkg:npm/@vitejs/plugin-react@6.1.2"
+    },
+    {
+      "type": "library",
+      "name": "@xterm/addon-fit",
+      "version": "0.11.0",
+      "purl": "pkg:npm/@xterm/addon-fit@0.11.0"
+    },
+    {
+      "type": "library",
+      "name": "@xterm/addon-search",
+      "version": "0.16.0",
+      "purl": "pkg:npm/@xterm/addon-search@0.16.0"
+    },
+    {
+      "type": "library",
+      "name": "@xterm/addon-web-links",
+      "version": "0.12.0",
+      "purl": "pkg:npm/@xterm/addon-web-links@0.12.0"
+    },
+    {
+      "type": "library",
+      "name": "@xterm/xterm",
+      "version": "6.0.0",
+      "purl": "pkg:npm/@xterm/xterm@6.0.0"
+    },
+    {
+      "type": "library",
+      "name": "autoprefixer",
+      "version": "10.6.1",
+      "purl": "pkg:npm/autoprefixer@10.6.1"
+    },
+    {
+      "type": "library",
+      "name": "clsx",
+      "version": "2.1.1",
+      "purl": "pkg:npm/clsx@2.1.1"
+    },
+    {
+      "type": "library",
+      "name": "lucide-react",
+      "version": "1.52.0",
+      "purl": "pkg:npm/lucide-react@1.52.0"
+    },
+    {
+      "type": "library",
+      "name": "node-pty",
+      "version": "1.1.0",
+      "purl": "pkg:npm/node-pty@1.1.0"
+    },
+    {
+      "type": "library",
+      "name": "postcss",
+      "version": "8.5.29",
+      "purl": "pkg:npm/postcss@8.5.29"
+    },
+    {
+      "type": "library",
+      "name": "qrcode",
+      "version": "1.5.4",
+      "purl": "pkg:npm/qrcode@1.5.4"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.3.0",
+      "purl": "pkg:npm/react@19.3.0"
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "19.3.0",
+      "purl": "pkg:npm/react-dom@19.3.0"
+    },
+    {
+      "type": "library",
+      "name": "sql.js",
+      "version": "1.14.2",
+      "purl": "pkg:npm/sql.js@1.14.2"
+    },
+    {
+      "type": "library",
+      "name": "ssh2",
+      "version": "1.17.0",
+      "purl": "pkg:npm/ssh2@1.17.0"
+    },
+    {
+      "type": "library",
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "purl": "pkg:npm/tailwindcss@4.3.3"
+    },
+    {
+      "type": "library",
+      "name": "uuid",
+      "version": "14.0.2",
+      "purl": "pkg:npm/uuid@14.0.2"
+    },
+    {
+      "type": "library",
+      "name": "vite",
+      "version": "8.3.3",
+      "purl": "pkg:npm/vite@8.3.3"
+    },
+    {
+      "type": "library",
+      "name": "ws",
+      "version": "8.22.0",
+      "purl": "pkg:npm/ws@8.22.0"
+    }
+  ]
+}

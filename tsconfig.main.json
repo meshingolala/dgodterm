@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/domain/**/*",
+    "src/storage/**/*",
+    "src/ssh/**/*",
+    "src/sftp/**/*",
+    "src/automation/**/*",
+    "src/audit/**/*",
+    "src/credential/**/*",
+    "src/policy/**/*",
+    "src/redaction/**/*",
+    "src/features/**/*",
+    "src/server/**/*",
+    "src/terminal/**/*"
+  ]
+}

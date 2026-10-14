@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditEvent",
+  "description": "DgodTerm Audit Event Schema with Cryptographic Hash Chaining for ISO/IEC 27001 readiness",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "actor_id",
+    "actor_role",
+    "occurred_at",
+    "correlation_id",
+    "action",
+    "outcome",
+    "metadata",
+    "integrity_link"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "actor_id": {
+      "type": "string"
+    },
+    "actor_role": {
+      "type": "string"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "resource_type": {
+      "type": ["string", "null"]
+    },
+    "resource_id": {
+      "type": ["string", "null"]
+    },
+    "action": {
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["success", "denied", "failed", "partial"]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    },
+    "change_reference": {
+      "type": ["string", "null"]
+    },
+    "policy_version": {
+      "type": ["string", "null"]
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "integrity_link": {
+      "type": "string",
+      "description": "SHA-256 hash chaining link H(previous_integrity_link + event_canonical_payload)"
+    }
+  },
+  "additionalProperties": false
+}

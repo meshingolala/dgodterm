@@ -1,0 +1,239 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  --dgod-app-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --dgod-base-font-size: 13px;
+  color-scheme: dark;
+  text-rendering: optimizeLegibility;
+}
+
+/* Universal application typography */
+body, button, input, textarea, select, table, th, td, span, div, p, label, a, h1, h2, h3, h4, h5, h6 {
+  font-family: var(--dgod-app-font);
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Preserve dedicated monospace for terminal, code, tokens & asciicast playback */
+code, kbd, samp, pre, .font-mono, .xterm, .xterm * {
+  font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace !important;
+  font-feature-settings: "liga" on, "calt" on;
+}
+
+/* ======================================================== */
+/* TEXT SHARPNESS & CLARITY ENGINE                          */
+/* Solves blurry text on Windows DirectWrite & dark mode    */
+/* ======================================================== */
+
+/* 1. Natural / Standard DirectWrite */
+.clarity-antialiased {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 2. Subpixel ClearType (RGB LCD Alignment + Subtle Edge Contrast) */
+.clarity-subpixel {
+  text-rendering: optimizeLegibility !important;
+  -webkit-font-smoothing: subpixel-antialiased !important;
+}
+.clarity-subpixel p,
+.clarity-subpixel span,
+.clarity-subpixel label,
+.clarity-subpixel button,
+.clarity-subpixel input,
+.clarity-subpixel h1,
+.clarity-subpixel h2,
+.clarity-subpixel h3 {
+  text-shadow: 0 0 0.25px rgba(255, 255, 255, 0.4);
+}
+
+/* 3. Ultra-Sharp (Micro-Contour & Edge Hardening for Dark Mode) */
+.clarity-ultra {
+  text-rendering: geometricPrecision !important;
+  font-synthesis: none !important;
+}
+.clarity-ultra p,
+.clarity-ultra span,
+.clarity-ultra label,
+.clarity-ultra button,
+.clarity-ultra input,
+.clarity-ultra h1,
+.clarity-ultra h2,
+.clarity-ultra h3 {
+  text-shadow: 0 0 0.35px rgba(255, 255, 255, 0.65);
+  -webkit-text-stroke: 0.15px rgba(255, 255, 255, 0.25);
+}
+
+/* 4. Pixel Crisp (Zero Smoothing / Geometric Precision / Pure Vector Edges) */
+.clarity-none {
+  text-rendering: geometricPrecision !important;
+  font-synthesis: none !important;
+  -webkit-font-smoothing: none !important;
+  font-smooth: never !important;
+  image-rendering: pixelated;
+  letter-spacing: -0.01em;
+}
+.clarity-none * {
+  text-rendering: geometricPrecision !important;
+  backdrop-filter: none !important; /* Prevents blur texture downsampling in Chromium */
+}
+.clarity-none p,
+.clarity-none span,
+.clarity-none label,
+.clarity-none button,
+.clarity-none input {
+  text-shadow: none !important;
+  filter: contrast(1.1);
+}
+
+/* Glyph Stroke Weight & Density (Compensates for dark-background optical erosion) */
+.stroke-normal {
+  font-weight: 400;
+}
+.stroke-medium,
+.stroke-medium p,
+.stroke-medium span,
+.stroke-medium label,
+.stroke-medium button,
+.stroke-medium div {
+  font-weight: 500;
+}
+.stroke-strong,
+.stroke-strong p,
+.stroke-strong span,
+.stroke-strong label,
+.stroke-strong button,
+.stroke-strong div {
+  font-weight: 600;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* Universal dark mode rules for native form selects & options */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0b1120 !important;
+  color: #f1f5f9 !important;
+  padding: 6px 10px;
+}
+
+/* ======================================================== */
+/* THEME MODE: MIDNIGHT DARK vs DARK-GRAY SLATE             */
+/* ======================================================== */
+
+/* 1. Default Midnight Obsidian (Dark Mode) */
+.theme-dark {
+  --dgod-bg-app: #090d16;
+  --dgod-bg-sidebar: #020617;
+  --dgod-bg-surface: #0f172a;
+  --dgod-bg-surface-elevated: #1e293b;
+  --dgod-border: #1e293b;
+  --dgod-border-subtle: rgba(255, 255, 255, 0.08);
+  --dgod-text-primary: #f8fafc;
+  --dgod-text-secondary: #94a3b8;
+  --dgod-text-muted: #64748b;
+}
+
+/* 2. Dark-Gray / Soft Zinc Slate (Glare-Free Light Mode) */
+.theme-light {
+  --dgod-bg-app: #18181b;
+  --dgod-bg-sidebar: #202024;
+  --dgod-bg-surface: #27272a;
+  --dgod-bg-surface-elevated: #3f3f46;
+  --dgod-border: #3f3f46;
+  --dgod-border-subtle: rgba(255, 255, 255, 0.12);
+  --dgod-text-primary: #fafafa;
+  --dgod-text-secondary: #d4d4d8;
+  --dgod-text-muted: #a1a1aa;
+}
+
+/* Scrollbar styling for Dark Gray / Slate */
+.theme-light ::-webkit-scrollbar-track {
+  background: #202024;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #52525b;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
+
+/* Native select background in Dark Gray theme */
+.theme-light select option {
+  background-color: #27272a !important;
+  color: #f4f4f5 !important;
+}
+
+/* Dark Gray palette overrides on slate utility classes */
+.theme-light .bg-\[\#090d16\] {
+  background-color: #18181b !important;
+}
+.theme-light .bg-slate-950 {
+  background-color: #202024 !important;
+}
+.theme-light .bg-slate-950\/90,
+.theme-light .bg-slate-950\/80,
+.theme-light .bg-slate-950\/60,
+.theme-light .bg-slate-950\/40 {
+  background-color: rgba(32, 32, 36, 0.95) !important;
+}
+.theme-light .bg-slate-900 {
+  background-color: #27272a !important;
+}
+.theme-light .bg-slate-900\/80,
+.theme-light .bg-slate-900\/60,
+.theme-light .bg-slate-900\/50,
+.theme-light .bg-slate-900\/40 {
+  background-color: rgba(39, 39, 42, 0.9) !important;
+}
+.theme-light .bg-slate-800 {
+  background-color: #3f3f46 !important;
+}
+.theme-light .border-slate-800,
+.theme-light .border-slate-800\/80,
+.theme-light .border-slate-800\/60,
+.theme-light .border-slate-800\/40 {
+  border-color: #3f3f46 !important;
+}
+.theme-light .border-slate-700 {
+  border-color: #52525b !important;
+}
+.theme-light .hover\:bg-slate-900:hover {
+  background-color: #2f2f35 !important;
+}
+.theme-light .hover\:bg-slate-800:hover {
+  background-color: #3f3f46 !important;
+}
+.theme-light .text-slate-400 {
+  color: #d4d4d8 !important;
+}
+.theme-light .text-slate-500 {
+  color: #a1a1aa !important;
+}
+.theme-light .text-slate-300 {
+  color: #f4f4f5 !important;
+}
+

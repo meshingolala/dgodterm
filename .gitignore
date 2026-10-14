@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Production build and installer artifacts
+dist/
+release/
+*.exe
+*.blockmap
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db
+
+# Temporary test / PDF files from scratch
+*.pdf
+compress_*.py
+Roboto-*.ttf
+
+# Local environment
+.env
+.env.local
+*.local
