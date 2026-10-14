@@ -732,6 +732,11 @@ export const SettingsView: React.FC = () => {
                             style={{ backgroundColor: theme.cursor }}
                           />
                           <span className="text-xs font-bold text-white">{theme.name}</span>
+                          {theme.id.startsWith('transparent') && (
+                            <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase">
+                              TRANSPARENT
+                            </span>
+                          )}
                         </div>
                         {isSelected && (
                           <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30 uppercase">
@@ -745,25 +750,95 @@ export const SettingsView: React.FC = () => {
                       </p>
 
                       {/* Swatch preview bar */}
-                      <div
-                        className="p-2 rounded-lg border border-white/10 flex items-center justify-between"
-                        style={{ backgroundColor: theme.background }}
-                      >
-                        <span className="text-[10px] font-mono px-1 font-bold" style={{ color: theme.foreground }}>
-                          ABC
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.red }} />
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.green }} />
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.yellow }} />
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.blue }} />
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.magenta }} />
-                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.cyan }} />
+                      <div className="relative rounded-lg border border-white/10 overflow-hidden">
+                        <div
+                          className="absolute inset-0 opacity-20 pointer-events-none"
+                          style={{
+                            backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+                            backgroundSize: '6px 6px'
+                          }}
+                        />
+                        <div
+                          className="relative p-2 flex items-center justify-between"
+                          style={{
+                            backgroundColor: theme.background,
+                            backdropFilter: theme.id.startsWith('transparent') ? 'blur(8px)' : undefined
+                          }}
+                        >
+                          <span className="text-[10px] font-mono px-1 font-bold" style={{ color: theme.foreground }}>
+                            ABC
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.red }} />
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.green }} />
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.yellow }} />
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.blue }} />
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.magenta }} />
+                            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theme.cyan }} />
+                          </div>
                         </div>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Terminal Background Opacity Slider */}
+              <div className="mt-4 p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-white flex items-center gap-2">
+                      <Eye className="w-3.5 h-3.5 text-sky-400" />
+                      Terminal Background Opacity
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      Adjust terminal window transparency. Works with transparent themes and custom solid themes.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-sky-400 bg-sky-950/80 border border-sky-500/40 px-2.5 py-1 rounded-lg">
+                    {Math.round((terminalSettings.backgroundOpacity ?? 1) * 100)}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-slate-500 font-mono">20%</span>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="1.0"
+                    step="0.05"
+                    value={terminalSettings.backgroundOpacity ?? 1}
+                    onChange={(e) => handleUpdateTerminalSetting('backgroundOpacity', parseFloat(e.target.value))}
+                    className="flex-1 accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <span className="text-[10px] text-slate-500 font-mono">100%</span>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-medium">Quick Presets:</span>
+                  {[
+                    { label: '100% Solid', value: 1.0 },
+                    { label: '85% Subtle Glass', value: 0.85 },
+                    { label: '65% Frosted Glass', value: 0.65 },
+                    { label: '45% Ultra Clear', value: 0.45 },
+                  ].map((preset) => {
+                    const isActive = Math.abs((terminalSettings.backgroundOpacity ?? 1) - preset.value) < 0.03;
+                    return (
+                      <button
+                        key={preset.value}
+                        onClick={() => handleUpdateTerminalSetting('backgroundOpacity', preset.value)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition cursor-pointer border ${
+                          isActive
+                            ? 'bg-sky-600/30 border-sky-500 text-sky-200 font-semibold'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

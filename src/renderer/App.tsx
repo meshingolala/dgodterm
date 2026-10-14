@@ -1792,7 +1792,7 @@ export const App: React.FC = () => {
         })()}
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative bg-gradient-to-br from-[#060a14] via-[#090d16] to-[#0f172a]">
           {tabs.map((tab) => {
             if (tab.type !== 'terminal' || !tab.sessionId || !tab.profile) return null;
             const isVisible = tab.id === activeTabId;

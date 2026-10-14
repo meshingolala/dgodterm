@@ -20,6 +20,7 @@ export interface TerminalSettings {
   rightClickPaste: boolean;
   windowPadding: number;
   audibleBell: boolean;
+  backgroundOpacity?: number;
 }
 
 export interface GeneralUiSettings {
@@ -288,8 +289,108 @@ export const TERMINAL_THEMES: Record<string, TerminalThemeDefinition> = {
     brightMagenta: '#a855f7',
     brightCyan: '#06b6d4',
     brightWhite: '#ffffff'
+  },
+  'transparent-glass': {
+    id: 'transparent-glass',
+    name: 'Frosted Glass (Transparent)',
+    description: 'Modern translucent acrylic dark glass with frosted blur and high-contrast sky accents',
+    background: 'rgba(9, 13, 22, 0.60)',
+    foreground: '#f8fafc',
+    cursor: '#38bdf8',
+    selectionBackground: 'rgba(56, 189, 248, 0.35)',
+    black: '#0f172a',
+    red: '#f87171',
+    green: '#4ade80',
+    yellow: '#facc15',
+    blue: '#60a5fa',
+    magenta: '#c084fc',
+    cyan: '#38bdf8',
+    white: '#f8fafc',
+    brightBlack: '#475569',
+    brightRed: '#ef4444',
+    brightGreen: '#22c55e',
+    brightYellow: '#eab308',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#a855f7',
+    brightCyan: '#06b6d4',
+    brightWhite: '#ffffff'
+  },
+  'transparent-ghost': {
+    id: 'transparent-ghost',
+    name: 'Pure Clear (Ultra Transparent)',
+    description: 'High-transparency minimal glass with 80% visibility through to background',
+    background: 'rgba(6, 9, 16, 0.22)',
+    foreground: '#ffffff',
+    cursor: '#4ade80',
+    selectionBackground: 'rgba(74, 222, 128, 0.35)',
+    black: '#090d16',
+    red: '#ff6b6b',
+    green: '#51cf66',
+    yellow: '#fcc419',
+    blue: '#339af0',
+    magenta: '#cc5de8',
+    cyan: '#22b8cf',
+    white: '#ffffff',
+    brightBlack: '#495057',
+    brightRed: '#ff8787',
+    brightGreen: '#69db7c',
+    brightYellow: '#ffd43b',
+    brightBlue: '#4dabf7',
+    brightMagenta: '#da77f2',
+    brightCyan: '#3bc9db',
+    brightWhite: '#ffffff'
+  },
+  'transparent-cyber': {
+    id: 'transparent-cyber',
+    name: 'Cyber Neon (Translucent)',
+    description: 'Translucent dark cyber deck with glowing emerald and cyan terminal phosphor',
+    background: 'rgba(5, 14, 20, 0.45)',
+    foreground: '#00ffcc',
+    cursor: '#00ffcc',
+    selectionBackground: 'rgba(0, 255, 204, 0.35)',
+    black: '#030a0d',
+    red: '#ff3366',
+    green: '#00ffcc',
+    yellow: '#ffe600',
+    blue: '#00bfff',
+    magenta: '#ff00ff',
+    cyan: '#00ffff',
+    white: '#e0ffff',
+    brightBlack: '#204040',
+    brightRed: '#ff6699',
+    brightGreen: '#33ffdd',
+    brightYellow: '#ffff66',
+    brightBlue: '#66d9ff',
+    brightMagenta: '#ff66ff',
+    brightCyan: '#80ffff',
+    brightWhite: '#ffffff'
   }
 };
+
+export function hexToRgba(hexOrRgba: string, alpha: number): string {
+  if (!hexOrRgba) return `rgba(9, 13, 22, ${alpha})`;
+  if (hexOrRgba.startsWith('rgba')) {
+    return hexOrRgba.replace(/[\d\.]+\)$/, `${alpha})`);
+  }
+  let c = hexOrRgba.replace('#', '');
+  if (c.length === 3) {
+    c = c.split('').map((x) => x + x).join('');
+  }
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return hexOrRgba;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function getEffectiveThemeBackground(themeId: string, opacity?: number): string {
+  const theme = TERMINAL_THEMES[themeId] || TERMINAL_THEMES['dgod-dark'];
+  if (opacity !== undefined && opacity < 1.0) {
+    return hexToRgba(theme.background, opacity);
+  }
+  return theme.background;
+}
 
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: "'Fira Code', 'Courier New', monospace",
@@ -304,7 +405,8 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   copyOnSelect: false,
   rightClickPaste: true,
   windowPadding: 8,
-  audibleBell: false
+  audibleBell: false,
+  backgroundOpacity: 1.0
 };
 
 export const DEFAULT_GENERAL_UI_SETTINGS: GeneralUiSettings = {

@@ -35,7 +35,7 @@ import {
   FileText,
   ChevronDown
 } from 'lucide-react';
-import { getTerminalSettings, TERMINAL_THEMES, TerminalSettings } from '../settings/settings-manager';
+import { getTerminalSettings, TERMINAL_THEMES, TerminalSettings, getEffectiveThemeBackground } from '../settings/settings-manager';
 import { copyTextToClipboard, readTextFromClipboard } from '../utils/clipboard-utils';
 import { SnippetsModal } from './SnippetsModal';
 import { HealthMonitorWidget } from './HealthMonitorWidget';
@@ -253,7 +253,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const [currentThemeBg, setCurrentThemeBg] = useState(() => {
     const ts = getTerminalSettings();
-    return TERMINAL_THEMES[ts.themeId]?.background || '#090d16';
+    return getEffectiveThemeBackground(ts.themeId, ts.backgroundOpacity);
   });
   const [paddingPx, setPaddingPx] = useState(() => {
     return getTerminalSettings().windowPadding ?? 8;
@@ -264,8 +264,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const initialSettings = getTerminalSettings();
     const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
+    const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
 
     const term = new XTerm({
+      allowTransparency: true,
       cursorBlink: initialSettings.cursorBlink,
       cursorStyle: initialSettings.cursorStyle,
       fontFamily: initialSettings.fontFamily,
@@ -275,6 +277,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
+        background: effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -493,11 +496,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       term.options.cursorBlink = updated.cursorBlink;
       term.options.scrollback = updated.scrollback;
       const themeDef = TERMINAL_THEMES[updated.themeId] || TERMINAL_THEMES['dgod-dark'];
+      const effectiveBg = getEffectiveThemeBackground(updated.themeId, updated.backgroundOpacity);
       term.options.theme = {
         ...themeDef,
+        background: effectiveBg,
         cursor: updated.cursorColor || themeDef.cursor
       };
-      setCurrentThemeBg(themeDef.background);
+      setCurrentThemeBg(effectiveBg);
       setPaddingPx(updated.windowPadding ?? 8);
       setTimeout(() => {
         fitAddon.fit();
@@ -634,8 +639,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const initialSettings = getTerminalSettings();
     const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
+    const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
 
     const secTerm = new XTerm({
+      allowTransparency: true,
       cursorBlink: initialSettings.cursorBlink,
       cursorStyle: initialSettings.cursorStyle,
       fontFamily: initialSettings.fontFamily,
@@ -645,6 +652,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
+        background: effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -813,8 +821,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setTerminalContextMenu(null);
   };
 
+  const isTransparent = currentThemeBg.startsWith('rgba') || currentThemeBg === 'transparent';
+
   return (
-    <div className="flex flex-col h-full w-full transition-colors duration-200" style={{ backgroundColor: currentThemeBg }}>
+    <div
+      className="flex flex-col h-full w-full transition-colors duration-200"
+      style={{
+        backgroundColor: currentThemeBg,
+        backdropFilter: isTransparent ? 'blur(16px)' : undefined,
+        WebkitBackdropFilter: isTransparent ? 'blur(16px)' : undefined
+      }}
+    >
       {/* Session Host Identity Banner */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-xs text-slate-300">
         <div className="flex items-center gap-3">
@@ -1188,7 +1205,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 : 'border border-slate-800 opacity-90'
               : ''
           }`}
-          style={{ padding: `${paddingPx}px`, backgroundColor: currentThemeBg }}
+          style={{
+            padding: `${paddingPx}px`,
+            backgroundColor: currentThemeBg,
+            backdropFilter: isTransparent ? 'blur(16px)' : undefined,
+            WebkitBackdropFilter: isTransparent ? 'blur(16px)' : undefined
+          }}
           onClick={() => setActivePane('primary')}
         >
           {splitMode !== 'none' && (
@@ -1210,7 +1232,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 ? 'border-2 border-sky-500/70 shadow-inner'
                 : 'border border-slate-800 opacity-90'
             }`}
-            style={{ padding: `${paddingPx}px`, backgroundColor: currentThemeBg }}
+            style={{
+              padding: `${paddingPx}px`,
+              backgroundColor: currentThemeBg,
+              backdropFilter: isTransparent ? 'blur(16px)' : undefined,
+              WebkitBackdropFilter: isTransparent ? 'blur(16px)' : undefined
+            }}
             onClick={() => setActivePane('secondary')}
           >
             <div className="absolute top-1 right-2 z-10 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-[10px] text-slate-300 font-mono flex items-center gap-1.5 select-none">
