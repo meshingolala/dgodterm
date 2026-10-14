@@ -265,6 +265,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const initialSettings = getTerminalSettings();
     const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
     const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
+    const initialIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
 
     const term = new XTerm({
       allowTransparency: true,
@@ -277,7 +278,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
-        background: effectiveBg,
+        background: initialIsTransparent ? 'transparent' : effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -497,9 +498,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       term.options.scrollback = updated.scrollback;
       const themeDef = TERMINAL_THEMES[updated.themeId] || TERMINAL_THEMES['dgod-dark'];
       const effectiveBg = getEffectiveThemeBackground(updated.themeId, updated.backgroundOpacity);
+      const updatedIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
       term.options.theme = {
         ...themeDef,
-        background: effectiveBg,
+        background: updatedIsTransparent ? 'transparent' : effectiveBg,
         cursor: updated.cursorColor || themeDef.cursor
       };
       setCurrentThemeBg(effectiveBg);
@@ -640,6 +642,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const initialSettings = getTerminalSettings();
     const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
     const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
+    const initialIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
 
     const secTerm = new XTerm({
       allowTransparency: true,
@@ -652,7 +655,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
-        background: effectiveBg,
+        background: initialIsTransparent ? 'transparent' : effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -824,16 +827,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isTransparent = currentThemeBg.startsWith('rgba') || currentThemeBg === 'transparent';
 
   return (
-    <div
-      className="flex flex-col h-full w-full transition-colors duration-200"
-      style={{
-        backgroundColor: currentThemeBg,
-        backdropFilter: isTransparent ? 'blur(16px)' : undefined,
-        WebkitBackdropFilter: isTransparent ? 'blur(16px)' : undefined
-      }}
-    >
+    <div className="flex flex-col h-full w-full transition-colors duration-200 bg-transparent">
       {/* Session Host Identity Banner */}
-      <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-xs text-slate-300">
+      <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-xs text-slate-300">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-medium">
             <DistroIcon flavor={currentProfile.os_flavor} className="w-3.5 h-3.5 text-sky-400 shrink-0" />
