@@ -1777,7 +1777,7 @@ export const App: React.FC = () => {
           const currentTerminalTab = tabs.find((t) => t.id === activeTabId && t.type === 'terminal');
           const curSid = currentTerminalTab?.sessionId || (activeSessions[0]?.sessionId || '');
 
-          if (activeSessions.length > 0) {
+          if (activeSessions.length > 0 && currentTerminalTab) {
             return (
               <BroadcastBar
                 activeSessions={activeSessions}

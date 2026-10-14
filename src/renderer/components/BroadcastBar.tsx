@@ -150,7 +150,7 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
     setDangerousConfirm(null);
   };
 
-  if (!isBroadcasting && activeSessions.length <= 1) {
+  if (activeSessions.length === 0) {
     return null;
   }
 
