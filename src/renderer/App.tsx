@@ -1430,7 +1430,7 @@ export const App: React.FC = () => {
       {/* Main Workspace & Tabs */}
       <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         {/* Top Tab Bar */}
-        <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center px-2 gap-1 shrink-0 relative z-30">
+        <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center px-2 gap-1 shrink-0 relative z-50">
           {/* Expand Sidebar Toggle (shown when collapsed) */}
           {isSidebarCollapsed && (
             <button
@@ -1521,7 +1521,7 @@ export const App: React.FC = () => {
           </div>
 
           {/* New Tab Dropdown (+) for Local Shells & Remote SSH */}
-          <div className="relative shrink-0 my-1 mx-0.5 z-40" ref={newTabDropdownRef}>
+          <div className="relative shrink-0 my-1 mx-0.5 z-50" ref={newTabDropdownRef}>
             <button
               type="button"
               onClick={(e) => {
@@ -1642,7 +1642,7 @@ export const App: React.FC = () => {
             )}
 
             {/* Consolidated Fleet Operations Dropdown Menu */}
-            <div className="relative shrink-0 z-40" ref={fleetDropdownRef}>
+            <div className="relative shrink-0 z-50" ref={fleetDropdownRef}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -1796,7 +1796,7 @@ export const App: React.FC = () => {
         })()}
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-hidden relative bg-[#090d16]">
+        <div className="flex-1 overflow-hidden relative z-10 bg-[#090d16]">
           {tabs.map((tab) => {
             if (tab.type !== 'terminal' || !tab.sessionId || !tab.profile) return null;
             const isVisible = tab.id === activeTabId;

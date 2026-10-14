@@ -944,7 +944,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   return (
     <div className="flex flex-col h-full w-full transition-colors duration-200 bg-transparent">
       {/* Session Host Identity Banner */}
-      <div className="relative z-30 flex items-center justify-between px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-xs text-slate-300">
+      <div className="relative z-20 flex items-center justify-between px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-xs text-slate-300">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-medium">
             <DistroIcon flavor={currentProfile.os_flavor} className="w-3.5 h-3.5 text-sky-400 shrink-0" />
