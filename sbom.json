@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:e17d4029-9308-4575-957e-ea5527633b46",
+  "serialNumber": "urn:uuid:9b3b374c-8244-4e51-a4d8-23853b10215c",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-14T18:56:40.468Z",
+    "timestamp": "2026-10-14T19:09:22.178Z",
     "component": {
       "type": "application",
       "name": "DgodTerm",

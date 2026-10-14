@@ -1195,9 +1195,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       )}
 
       {/* Terminal Viewport / Multiplexer Panes */}
-      <div className={`flex-1 w-full overflow-hidden flex relative bg-[#090d16] ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}>
+      <div className={`flex-1 w-full overflow-hidden flex relative bg-transparent ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}>
         {/* Terminal Ambient Backdrop (visible through transparent themes or reduced opacity) */}
-        {backdropStyle !== 'solid' && (
+        {backdropStyle !== 'solid' && backdropStyle !== 'desktop' && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
             {backdropStyle === 'cyber-grid' && (
               <>

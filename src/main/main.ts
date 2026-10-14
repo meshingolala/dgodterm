@@ -67,7 +67,10 @@ async function createWindow() {
       minHeight: 700,
       show: false,
       title: 'DgodTerm — Secure SSH & Ansible Fleet Automation',
-      backgroundColor: '#090d16',
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      backgroundMaterial: 'acrylic',
       icon: iconPath || undefined,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
@@ -75,6 +78,13 @@ async function createWindow() {
         contextIsolation: true,
         sandbox: false
       }
+    });
+
+    mainWindow.on('maximize', () => {
+      mainWindow?.webContents.send('window:maximized-change', true);
+    });
+    mainWindow.on('unmaximize', () => {
+      mainWindow?.webContents.send('window:maximized-change', false);
     });
 
     // Create System Tray
@@ -201,6 +211,27 @@ function registerIpcHandlers() {
   const creds = CredentialBroker.getInstance();
   const policy = PolicyEngine.getInstance();
   const ansible = AnsibleRunner.getInstance();
+ 
+  // Window Controls (Frameless Window)
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize();
+  });
+  ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+      return false;
+    } else {
+      mainWindow.maximize();
+      return true;
+    }
+  });
+  ipcMain.handle('window:close', () => {
+    mainWindow?.close();
+  });
+  ipcMain.handle('window:is-maximized', () => {
+    return mainWindow?.isMaximized() ?? false;
+  });
 
   // Profiles
   ipcMain.handle('profiles:get-all', () => dbOperations.getProfiles());

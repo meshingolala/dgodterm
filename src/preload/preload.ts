@@ -257,6 +257,17 @@ export const dgodtermApi = {
     const handler = () => callback();
     ipcRenderer.on('system:lock-screen', handler);
     return () => ipcRenderer.removeListener('system:lock-screen', handler);
+  },
+
+  // Window Controls (Frameless window management)
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+    const handler = (_event: any, isMaximized: boolean) => callback(isMaximized);
+    ipcRenderer.on('window:maximized-change', handler);
+    return () => ipcRenderer.removeListener('window:maximized-change', handler);
   }
 };
 

@@ -21,7 +21,7 @@ export interface TerminalSettings {
   windowPadding: number;
   audibleBell: boolean;
   backgroundOpacity?: number;
-  backdropStyle?: 'cyber-grid' | 'aurora' | 'deep-space' | 'matrix' | 'solid';
+  backdropStyle?: 'desktop' | 'cyber-grid' | 'aurora' | 'deep-space' | 'matrix' | 'solid';
 }
 
 export interface GeneralUiSettings {
@@ -401,14 +401,14 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   cursorStyle: 'block',
   cursorBlink: true,
   cursorColor: '#38bdf8',
-  themeId: 'dgod-dark',
+  themeId: 'transparent-glass',
   scrollback: 5000,
   copyOnSelect: false,
   rightClickPaste: true,
   windowPadding: 8,
   audibleBell: false,
-  backgroundOpacity: 1.0,
-  backdropStyle: 'cyber-grid'
+  backgroundOpacity: 0.65,
+  backdropStyle: 'desktop'
 };
 
 export const DEFAULT_GENERAL_UI_SETTINGS: GeneralUiSettings = {
