@@ -33,20 +33,27 @@ import {
   Smartphone,
   QrCode,
   AlertTriangle,
-  KeyRound
+  KeyRound,
+  Plus,
+  Minus,
+  ShieldCheck
 } from 'lucide-react';
 import { QrCanvas } from './QrCanvas';
 import { CustomSelect, CustomSelectOption } from './CustomSelect';
 import {
   TerminalSettings,
   GeneralUiSettings,
+  SessionSecuritySettings,
   TERMINAL_THEMES,
   DEFAULT_TERMINAL_SETTINGS,
   DEFAULT_GENERAL_UI_SETTINGS,
+  DEFAULT_SESSION_SECURITY_SETTINGS,
   getTerminalSettings,
   saveTerminalSettings,
   getGeneralUiSettings,
-  saveGeneralUiSettings
+  saveGeneralUiSettings,
+  getSessionSecuritySettings,
+  saveSessionSecuritySettings
 } from '../settings/settings-manager';
 
 const SCREEN_LOCK_OPTIONS: CustomSelectOption<number>[] = [
@@ -196,7 +203,10 @@ export const SettingsView: React.FC = () => {
   const [showBundleModal, setShowBundleModal] = useState(false);
 
   // Session & Screen Timeout Settings
-  const [screenLockTimeoutMinutes, setScreenLockTimeoutMinutes] = useState(30);
+  const [autoLockoutEnabled, setAutoLockoutEnabled] = useState(true);
+  const [screenLockTimeoutMinutes, setScreenLockTimeoutMinutes] = useState(15);
+  const [customTimeoutInput, setCustomTimeoutInput] = useState('15');
+  const [lockOnOsLock, setLockOnOsLock] = useState(true);
   const [passwordRetentionMinutes, setPasswordRetentionMinutes] = useState(-1);
   const [keepTabsAliveInBackground, setKeepTabsAliveInBackground] = useState(true);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -216,13 +226,13 @@ export const SettingsView: React.FC = () => {
     loadPolicyAndAgent();
     loadMfaStatus();
     try {
-      const saved = localStorage.getItem('dgodterm_session_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.screenLockTimeoutMinutes !== undefined) setScreenLockTimeoutMinutes(parsed.screenLockTimeoutMinutes);
-        if (parsed.passwordRetentionMinutes !== undefined) setPasswordRetentionMinutes(parsed.passwordRetentionMinutes);
-        if (parsed.keepTabsAliveInBackground !== undefined) setKeepTabsAliveInBackground(parsed.keepTabsAliveInBackground);
-      }
+      const sessionSec = getSessionSecuritySettings();
+      setAutoLockoutEnabled(sessionSec.autoLockoutEnabled);
+      setScreenLockTimeoutMinutes(sessionSec.screenLockTimeoutMinutes);
+      setCustomTimeoutInput(String(sessionSec.screenLockTimeoutMinutes));
+      setLockOnOsLock(sessionSec.lockOnOsLock);
+      setPasswordRetentionMinutes(sessionSec.passwordRetentionMinutes);
+      setKeepTabsAliveInBackground(sessionSec.keepTabsAliveInBackground);
     } catch (e) {}
   }, []);
 
@@ -315,19 +325,44 @@ export const SettingsView: React.FC = () => {
     showSavedNotification();
   };
 
-  const handleSaveSessionSettings = (lockMins: number, retMins: number, keepAlive: boolean) => {
-    setScreenLockTimeoutMinutes(lockMins);
-    setPasswordRetentionMinutes(retMins);
-    setKeepTabsAliveInBackground(keepAlive);
-
-    const config = {
-      screenLockTimeoutMinutes: lockMins,
-      passwordRetentionMinutes: retMins,
-      keepTabsAliveInBackground: keepAlive
+  const handleSaveSessionSettings = (updated: Partial<SessionSecuritySettings>) => {
+    const current = getSessionSecuritySettings();
+    const next: SessionSecuritySettings = {
+      ...current,
+      autoLockoutEnabled: updated.autoLockoutEnabled !== undefined ? updated.autoLockoutEnabled : autoLockoutEnabled,
+      screenLockTimeoutMinutes: updated.screenLockTimeoutMinutes !== undefined ? updated.screenLockTimeoutMinutes : screenLockTimeoutMinutes,
+      passwordRetentionMinutes: updated.passwordRetentionMinutes !== undefined ? updated.passwordRetentionMinutes : passwordRetentionMinutes,
+      keepTabsAliveInBackground: updated.keepTabsAliveInBackground !== undefined ? updated.keepTabsAliveInBackground : keepTabsAliveInBackground,
+      lockOnOsLock: updated.lockOnOsLock !== undefined ? updated.lockOnOsLock : lockOnOsLock,
     };
-    localStorage.setItem('dgodterm_session_settings', JSON.stringify(config));
-    window.dispatchEvent(new Event('dgodterm:settings-updated'));
+    setAutoLockoutEnabled(next.autoLockoutEnabled);
+    setScreenLockTimeoutMinutes(next.screenLockTimeoutMinutes);
+    setCustomTimeoutInput(String(next.screenLockTimeoutMinutes));
+    setLockOnOsLock(next.lockOnOsLock);
+    setPasswordRetentionMinutes(next.passwordRetentionMinutes);
+    setKeepTabsAliveInBackground(next.keepTabsAliveInBackground);
+
+    saveSessionSecuritySettings(next);
     showSavedNotification();
+  };
+
+  const handleCustomTimeoutChange = (valStr: string) => {
+    setCustomTimeoutInput(valStr);
+    const num = parseInt(valStr, 10);
+    if (!isNaN(num) && num >= 1 && num <= 1440) {
+      handleSaveSessionSettings({ screenLockTimeoutMinutes: num });
+    }
+  };
+
+  const handleCustomTimeoutStep = (delta: number) => {
+    const current = screenLockTimeoutMinutes || 15;
+    const nextVal = Math.max(1, Math.min(1440, current + delta));
+    setCustomTimeoutInput(String(nextVal));
+    handleSaveSessionSettings({ screenLockTimeoutMinutes: nextVal });
+  };
+
+  const handleTriggerManualLock = () => {
+    window.dispatchEvent(new Event('dgodterm:lock-request'));
   };
 
   const handleResetTerminalDefaults = () => {
@@ -1197,74 +1232,211 @@ export const SettingsView: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'session' && (
           <div className="space-y-6">
-            <div className="bg-slate-900/90 border border-emerald-500/40 rounded-xl p-5 space-y-4 shadow-xl">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
-                  <Timer className="w-5 h-5" />
+            {/* Automatic Inactivity Lockout Hero Card */}
+            <div className="bg-slate-900/90 border border-sky-500/40 rounded-xl p-5 space-y-5 shadow-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-sm font-bold text-white">
+                        Automatic Workstation Inactivity Lockout
+                      </h3>
+                      {autoLockoutEnabled ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Active &bull; {screenLockTimeoutMinutes} min
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700">
+                          Disabled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                      Automatically locks down your terminal workstation when you step away from your desk or leave the app idle.
+                      Once locked, active SSH sessions are masked and protected behind your Master Password and Google Authenticator.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    Session Inactivity & Screen Timeout Settings
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Configure how long you can leave the screen or switch tabs before locking or re-authenticating.
-                  </p>
-                </div>
+
+                {/* Master Toggle */}
+                <label className="flex items-center gap-2.5 cursor-pointer bg-slate-950 px-3.5 py-2 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoLockoutEnabled}
+                    onChange={(e) => handleSaveSessionSettings({ autoLockoutEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-slate-200">
+                    {autoLockoutEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </label>
               </div>
 
-              <div className="grid grid-cols-3 gap-5 pt-1">
-                {/* Screen Lock Timeout */}
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-sky-400" />
-                    Screen Inactivity Lock Timeout
-                  </label>
-                  <p className="text-[11px] text-slate-400">
-                    Lock screen after you are idle or away from the workstation.
-                  </p>
-                  <CustomSelect
-                    value={screenLockTimeoutMinutes}
-                    onChange={(val) => handleSaveSessionSettings(Number(val), passwordRetentionMinutes, keepTabsAliveInBackground)}
-                    options={SCREEN_LOCK_OPTIONS}
-                  />
-                </div>
+              {autoLockoutEnabled ? (
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/80 space-y-4">
+                  {/* Custom Number Input & Stepper */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-850">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-sky-400" />
+                        Configure Lockout Timeout Duration
+                      </label>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Set any exact number of minutes you want before the workstation automatically locks.
+                      </p>
+                    </div>
 
-                {/* Password Retention */}
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Lock className="w-4 h-4 text-emerald-400" />
-                    Password In-Memory Retention
-                  </label>
-                  <p className="text-[11px] text-slate-400">
-                    Keep password in volatile process memory for reconnections.
-                  </p>
-                  <CustomSelect
-                    value={passwordRetentionMinutes}
-                    onChange={(val) => handleSaveSessionSettings(screenLockTimeoutMinutes, Number(val), keepTabsAliveInBackground)}
-                    options={RETENTION_OPTIONS}
-                  />
-                </div>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <div className="flex items-center bg-slate-900 border border-slate-750 rounded-lg overflow-hidden shadow-inner">
+                        <button
+                          type="button"
+                          onClick={() => handleCustomTimeoutStep(-1)}
+                          disabled={screenLockTimeoutMinutes <= 1}
+                          title="Decrease by 1 minute"
+                          className="px-2.5 py-2 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1440"
+                          value={customTimeoutInput}
+                          onChange={(e) => handleCustomTimeoutChange(e.target.value)}
+                          onBlur={() => setCustomTimeoutInput(String(screenLockTimeoutMinutes))}
+                          className="w-16 bg-transparent text-center font-mono font-bold text-sm text-sky-300 focus:outline-none py-1.5"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCustomTimeoutStep(1)}
+                          disabled={screenLockTimeoutMinutes >= 1440}
+                          title="Increase by 1 minute"
+                          className="px-2.5 py-2 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <span className="text-xs font-medium text-slate-400">minutes</span>
+                    </div>
+                  </div>
 
-                {/* Background Keep-Alive */}
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  {/* Quick Preset Pills */}
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Quick Presets:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { mins: 1, label: '1 min (Test)' },
+                        { mins: 2, label: '2 mins' },
+                        { mins: 5, label: '5 mins' },
+                        { mins: 10, label: '10 mins' },
+                        { mins: 15, label: '15 mins (Standard)' },
+                        { mins: 30, label: '30 mins (Default)' },
+                        { mins: 60, label: '1 hour' },
+                        { mins: 120, label: '2 hours' }
+                      ].map((preset) => {
+                        const isSelected = screenLockTimeoutMinutes === preset.mins;
+                        return (
+                          <button
+                            key={preset.mins}
+                            type="button"
+                            onClick={() => {
+                              setCustomTimeoutInput(String(preset.mins));
+                              handleSaveSessionSettings({ screenLockTimeoutMinutes: preset.mins });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                              isSelected
+                                ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-sm shadow-sky-500/20'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-850 hover:text-white hover:border-slate-700'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* OS Lock Screen Sync & Manual Lock Button */}
+                  <div className="pt-3 border-t border-slate-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={lockOnOsLock}
+                        onChange={(e) => handleSaveSessionSettings({ lockOnOsLock: e.target.checked })}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-300">
+                        Lock immediately when Windows lock screen is triggered (<kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] font-mono text-slate-300">Win+L</kbd>) or system sleeps
+                      </span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={handleTriggerManualLock}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-medium transition-colors self-start sm:self-auto"
+                      title="Test lock screen immediately"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      Test Lock Screen Now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2.5 text-xs text-amber-300">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>
+                    Workstation inactivity lockout is currently disabled. DgodTerm will remain unlocked even when away from your desk.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Additional Session & Memory Security Options */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Password Retention */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-3 shadow-lg">
+                <label className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-emerald-400" />
+                  Password In-Memory Retention
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Controls how long SSH passwords are held in volatile RAM so you do not need to re-type credentials on reconnect.
+                </p>
+                <CustomSelect
+                  value={passwordRetentionMinutes}
+                  onChange={(val) => handleSaveSessionSettings({ passwordRetentionMinutes: Number(val) })}
+                  options={RETENTION_OPTIONS}
+                />
+              </div>
+
+              {/* Background Keep-Alive */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-3 shadow-lg flex flex-col justify-between">
+                <div>
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-amber-400" />
                     Background Session Keep-Alive
                   </label>
-                  <p className="text-[11px] text-slate-400">
-                    Maintain live SSH streams when switching between tabs.
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Maintain live SSH socket streams while switching between tabs or working in settings.
                   </p>
-                  <label className="flex items-center gap-2 cursor-pointer pt-2">
-                    <input
-                      type="checkbox"
-                      checked={keepTabsAliveInBackground}
-                      onChange={(e) => handleSaveSessionSettings(screenLockTimeoutMinutes, passwordRetentionMinutes, e.target.checked)}
-                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-0"
-                    />
-                    <span className="text-xs text-slate-300 font-medium">Keep sessions connected in background</span>
-                  </label>
                 </div>
+                <label className="flex items-center gap-2.5 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    checked={keepTabsAliveInBackground}
+                    onChange={(e) => handleSaveSessionSettings({ keepTabsAliveInBackground: e.target.checked })}
+                    className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-300 font-medium">Keep sessions connected in background</span>
+                </label>
               </div>
+            </div>
 
               {/* Google Authenticator (MFA / 2FA) Workstation Access Card */}
               <div className="mt-4 p-5 bg-slate-950/90 border border-slate-800 rounded-xl space-y-4">
@@ -1320,7 +1492,6 @@ export const SettingsView: React.FC = () => {
                 )}
               </div>
             </div>
-          </div>
         )}
 
         {/* ======================================================== */}

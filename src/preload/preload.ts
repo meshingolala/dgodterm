@@ -248,7 +248,16 @@ export const dgodtermApi = {
 
   // Desktop Notifications
   showNotification: (title: string, body: string, icon?: string) =>
-    ipcRenderer.invoke('notification:show', { title, body, icon })
+    ipcRenderer.invoke('notification:show', { title, body, icon }),
+
+  // Workstation Power & Idle Monitoring
+  getSystemIdleTime: () =>
+    ipcRenderer.invoke('system:get-idle-time'),
+  onSystemLockScreen: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('system:lock-screen', handler);
+    return () => ipcRenderer.removeListener('system:lock-screen', handler);
+  }
 };
 
 contextBridge.exposeInMainWorld('dgodterm', dgodtermApi);

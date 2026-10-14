@@ -27,7 +27,7 @@ import { CloudImportModal } from './components/CloudImportModal';
 import { HostNotesModal } from './components/HostNotesModal';
 import { DistroIcon } from './components/DistroIcon';
 import { v4 as uuidv4 } from 'uuid';
-import { getGeneralUiSettings, saveGeneralUiSettings, GeneralUiSettings } from './settings/settings-manager';
+import { getGeneralUiSettings, saveGeneralUiSettings, GeneralUiSettings, getSessionSecuritySettings, SessionSecuritySettings } from './settings/settings-manager';
 
 import {
   LayoutDashboard,
@@ -147,17 +147,7 @@ export const App: React.FC = () => {
   });
 
   // In-Memory Password Retention & Session Timeout Settings
-  const [sessionSettings, setSessionSettings] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dgodterm_session_settings');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {
-      screenLockTimeoutMinutes: 30,
-      passwordRetentionMinutes: -1,
-      keepTabsAliveInBackground: true
-    };
-  });
+  const [sessionSettings, setSessionSettings] = useState<SessionSecuritySettings>(getSessionSecuritySettings);
   const [uiSettings, setUiSettings] = useState<GeneralUiSettings>(getGeneralUiSettings);
   const [draggedProfileId, setDraggedProfileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null | 'root'>(null);
@@ -170,7 +160,7 @@ export const App: React.FC = () => {
       return false;
     }
   });
-  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
+  const lastActiveTimeRef = useRef(Date.now());
 
   const handleLogout = async () => {
     try {
@@ -268,18 +258,17 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const handleSettingsUpdated = () => {
-      try {
-        const saved = localStorage.getItem('dgodterm_session_settings');
-        if (saved) setSessionSettings(JSON.parse(saved));
-      } catch (e) {}
+      setSessionSettings(getSessionSecuritySettings());
     };
     const handleUiSettingsUpdated = (e: any) => {
       setUiSettings(e.detail || getGeneralUiSettings());
     };
     window.addEventListener('dgodterm:settings-updated', handleSettingsUpdated);
+    window.addEventListener('dgodterm:session-settings-updated', handleSettingsUpdated);
     window.addEventListener('dgodterm:ui-settings-updated', handleUiSettingsUpdated);
     return () => {
       window.removeEventListener('dgodterm:settings-updated', handleSettingsUpdated);
+      window.removeEventListener('dgodterm:session-settings-updated', handleSettingsUpdated);
       window.removeEventListener('dgodterm:ui-settings-updated', handleUiSettingsUpdated);
     };
   }, []);
@@ -307,33 +296,55 @@ export const App: React.FC = () => {
     document.documentElement.style.setProperty('--dgod-base-font-size', `${uiSettings.appFontSize || 13}px`);
   }, [uiSettings.appFontSize, uiSettings.appFontFamily]);
 
-
-  // User activity tracker for screen inactivity lock
+  // User activity tracker for workstation inactivity lockout
   useEffect(() => {
     const recordActivity = () => {
-      if (!isLocked) {
-        setLastActiveTime(Date.now());
-      }
+      lastActiveTimeRef.current = Date.now();
     };
 
-    const events = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'];
+    const events = ['mousemove', 'mousedown', 'keydown', 'keyup', 'wheel', 'touchstart', 'pointerdown', 'focus', 'click'];
     events.forEach((evt) => window.addEventListener(evt, recordActivity, { passive: true }));
+    window.addEventListener('dgodterm:user-activity', recordActivity);
+    window.addEventListener('dgodterm:lock-request', handleLogout);
 
-    const interval = setInterval(() => {
-      const lockMinutes = sessionSettings.screenLockTimeoutMinutes;
-      if (lockMinutes > 0 && !isLocked) {
-        const idleMs = Date.now() - lastActiveTime;
-        if (idleMs > lockMinutes * 60 * 1000) {
-          setIsLocked(true);
+    const interval = setInterval(async () => {
+      if (isLocked || !isAuthenticated) return;
+
+      const timeoutMins = sessionSettings.screenLockTimeoutMinutes;
+      if (!sessionSettings.autoLockoutEnabled || timeoutMins <= 0) return;
+
+      const now = Date.now();
+      const localIdleSeconds = (now - lastActiveTimeRef.current) / 1000;
+
+      let osIdleSeconds = 0;
+      try {
+        if ((window as any).dgodterm?.getSystemIdleTime) {
+          osIdleSeconds = await (window as any).dgodterm.getSystemIdleTime();
         }
+      } catch {}
+
+      const timeoutSeconds = timeoutMins * 60;
+      if (localIdleSeconds >= timeoutSeconds || (osIdleSeconds >= timeoutSeconds && localIdleSeconds >= 5)) {
+        console.log(`[DgodTerm] Inactivity timeout reached (${timeoutMins} min). Auto-locking workstation.`);
+        handleLogout();
       }
-    }, 5000);
+    }, 1000);
+
+    const unsubLock = (window as any).dgodterm?.onSystemLockScreen?.(() => {
+      if (sessionSettings.lockOnOsLock !== false && isAuthenticated && !isLocked) {
+        console.log('[DgodTerm] OS screen locked. Auto-locking workstation.');
+        handleLogout();
+      }
+    });
 
     return () => {
       events.forEach((evt) => window.removeEventListener(evt, recordActivity));
+      window.removeEventListener('dgodterm:user-activity', recordActivity);
+      window.removeEventListener('dgodterm:lock-request', handleLogout);
       clearInterval(interval);
+      if (unsubLock) unsubLock();
     };
-  }, [isLocked, lastActiveTime, sessionSettings.screenLockTimeoutMinutes]);
+  }, [isLocked, isAuthenticated, sessionSettings.autoLockoutEnabled, sessionSettings.screenLockTimeoutMinutes, sessionSettings.lockOnOsLock]);
 
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;

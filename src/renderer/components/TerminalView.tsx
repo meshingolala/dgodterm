@@ -313,6 +313,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Terminal data input
     term.onData((data) => {
+      window.dispatchEvent(new Event('dgodterm:user-activity'));
       if (isLocalShell) {
         (window as any).dgodterm.sendLocalData?.(sessionId, data);
       } else {
@@ -584,6 +585,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleGlobalClick = () => setTerminalContextMenu(null);
     window.addEventListener('click', handleGlobalClick);
 
+    // Report user activity on pointer/wheel inside terminal
+    const handleTerminalActivity = () => {
+      window.dispatchEvent(new Event('dgodterm:user-activity'));
+    };
+    terminalEl.addEventListener('pointerdown', handleTerminalActivity, { passive: true });
+    terminalEl.addEventListener('wheel', handleTerminalActivity, { passive: true });
+
     return () => {
       window.removeEventListener('resize', handleResize);
       if (resizeObserver) resizeObserver.disconnect();
@@ -591,6 +599,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       window.removeEventListener('click', handleGlobalClick);
       terminalEl.removeEventListener('contextmenu', handleContextMenu);
       terminalEl.removeEventListener('paste', handlePaste);
+      terminalEl.removeEventListener('pointerdown', handleTerminalActivity);
+      terminalEl.removeEventListener('wheel', handleTerminalActivity);
       if (isLocalShell) {
         try {
           (window as any).dgodterm?.closeLocalShell?.(sessionId);

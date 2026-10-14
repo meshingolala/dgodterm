@@ -367,3 +367,50 @@ export function saveGeneralUiSettings(settings: GeneralUiSettings): void {
     console.error('Failed to save UI settings to storage:', e);
   }
 }
+
+export interface SessionSecuritySettings {
+  autoLockoutEnabled: boolean;
+  screenLockTimeoutMinutes: number;
+  passwordRetentionMinutes: number;
+  keepTabsAliveInBackground: boolean;
+  lockOnOsLock: boolean;
+}
+
+export const DEFAULT_SESSION_SECURITY_SETTINGS: SessionSecuritySettings = {
+  autoLockoutEnabled: true,
+  screenLockTimeoutMinutes: 15,
+  passwordRetentionMinutes: -1,
+  keepTabsAliveInBackground: true,
+  lockOnOsLock: true
+};
+
+export const STORAGE_KEY_SESSION = 'dgodterm_session_settings';
+
+export function getSessionSecuritySettings(): SessionSecuritySettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SESSION);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        autoLockoutEnabled: parsed.autoLockoutEnabled !== undefined ? Boolean(parsed.autoLockoutEnabled) : (parsed.screenLockTimeoutMinutes !== 0),
+        screenLockTimeoutMinutes: typeof parsed.screenLockTimeoutMinutes === 'number' ? parsed.screenLockTimeoutMinutes : 15,
+        passwordRetentionMinutes: typeof parsed.passwordRetentionMinutes === 'number' ? parsed.passwordRetentionMinutes : -1,
+        keepTabsAliveInBackground: parsed.keepTabsAliveInBackground !== undefined ? Boolean(parsed.keepTabsAliveInBackground) : true,
+        lockOnOsLock: parsed.lockOnOsLock !== undefined ? Boolean(parsed.lockOnOsLock) : true
+      };
+    }
+  } catch (e) {
+    console.error('Failed to parse session settings from storage:', e);
+  }
+  return { ...DEFAULT_SESSION_SECURITY_SETTINGS };
+}
+
+export function saveSessionSecuritySettings(settings: SessionSecuritySettings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(settings));
+    window.dispatchEvent(new CustomEvent('dgodterm:session-settings-updated', { detail: settings }));
+    window.dispatchEvent(new Event('dgodterm:settings-updated'));
+  } catch (e) {
+    console.error('Failed to save session settings to storage:', e);
+  }
+}

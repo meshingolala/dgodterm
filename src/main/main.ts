@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, clipboard, Tray, Menu, Notification, globalShortcut, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, clipboard, Tray, Menu, Notification, globalShortcut, nativeImage, powerMonitor } from 'electron';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -825,6 +825,15 @@ function registerIpcHandlers() {
       return { success: false, reason: e.message };
     }
   });
+
+  // Workstation Power & Idle Monitoring
+  ipcMain.handle('system:get-idle-time', () => {
+    try {
+      return powerMonitor.getSystemIdleTime();
+    } catch {
+      return 0;
+    }
+  });
 }
 
 app.whenReady().then(async () => {
@@ -832,6 +841,18 @@ app.whenReady().then(async () => {
     registerIpcHandlers();
     UptimeMonitorService.getInstance().start(30);
     await createWindow();
+
+    // Listen for OS screen lock / suspend events to auto-lock workstation
+    try {
+      powerMonitor.on('lock-screen', () => {
+        mainWindow?.webContents.send('system:lock-screen');
+      });
+      powerMonitor.on('suspend', () => {
+        mainWindow?.webContents.send('system:lock-screen');
+      });
+    } catch (pmErr) {
+      console.warn('[Main] powerMonitor listeners failed:', pmErr);
+    }
 
     // Global Hotkey (F12) to toggle dropdown terminal visibility
     try {
