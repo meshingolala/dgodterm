@@ -21,6 +21,7 @@ export interface TerminalSettings {
   windowPadding: number;
   audibleBell: boolean;
   backgroundOpacity?: number;
+  backdropStyle?: 'cyber-grid' | 'aurora' | 'deep-space' | 'matrix' | 'solid';
 }
 
 export interface GeneralUiSettings {
@@ -406,7 +407,8 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   rightClickPaste: true,
   windowPadding: 8,
   audibleBell: false,
-  backgroundOpacity: 1.0
+  backgroundOpacity: 1.0,
+  backdropStyle: 'cyber-grid'
 };
 
 export const DEFAULT_GENERAL_UI_SETTINGS: GeneralUiSettings = {

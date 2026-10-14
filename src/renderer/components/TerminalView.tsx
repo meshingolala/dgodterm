@@ -258,6 +258,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [paddingPx, setPaddingPx] = useState(() => {
     return getTerminalSettings().windowPadding ?? 8;
   });
+  const [backdropStyle, setBackdropStyle] = useState<string>(() => {
+    return getTerminalSettings().backdropStyle || 'cyber-grid';
+  });
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -506,6 +509,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       };
       setCurrentThemeBg(effectiveBg);
       setPaddingPx(updated.windowPadding ?? 8);
+      setBackdropStyle(updated.backdropStyle || 'cyber-grid');
       setTimeout(() => {
         fitAddon.fit();
         (window as any).dgodterm.resizeSSH(sessionId, term.cols, term.rows);
@@ -1191,10 +1195,63 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       )}
 
       {/* Terminal Viewport / Multiplexer Panes */}
-      <div className={`flex-1 w-full overflow-hidden flex ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}>
+      <div className={`flex-1 w-full overflow-hidden flex relative bg-[#090d16] ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}>
+        {/* Terminal Ambient Backdrop (visible through transparent themes or reduced opacity) */}
+        {backdropStyle !== 'solid' && (
+          <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
+            {backdropStyle === 'cyber-grid' && (
+              <>
+                <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-cyan-500/25 blur-3xl" />
+                <div className="absolute top-1/2 -right-32 w-80 h-80 rounded-full bg-indigo-500/20 blur-3xl" />
+                <div className="absolute -bottom-32 left-1/4 w-96 h-96 rounded-full bg-emerald-500/20 blur-3xl" />
+                <div
+                  className="absolute inset-0 opacity-25"
+                  style={{
+                    backgroundImage: `
+                      linear-gradient(to right, rgba(56, 189, 248, 0.3) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(56, 189, 248, 0.3) 1px, transparent 1px)
+                    `,
+                    backgroundSize: '36px 36px'
+                  }}
+                />
+              </>
+            )}
+
+            {backdropStyle === 'aurora' && (
+              <>
+                <div className="absolute top-0 left-1/4 w-[500px] h-72 rounded-full bg-purple-600/30 blur-3xl" />
+                <div className="absolute bottom-0 right-1/4 w-[450px] h-72 rounded-full bg-teal-500/25 blur-3xl" />
+                <div className="absolute top-1/3 right-10 w-72 h-72 rounded-full bg-pink-500/20 blur-3xl" />
+              </>
+            )}
+
+            {backdropStyle === 'deep-space' && (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-br from-[#060c1d] via-[#091428] to-[#050811]" />
+                <div className="absolute top-10 right-20 w-80 h-80 rounded-full bg-blue-600/25 blur-3xl" />
+                <div className="absolute bottom-10 left-10 w-80 h-80 rounded-full bg-sky-500/20 blur-3xl" />
+              </>
+            )}
+
+            {backdropStyle === 'matrix' && (
+              <>
+                <div className="absolute top-0 right-1/3 w-96 h-96 rounded-full bg-emerald-600/25 blur-3xl" />
+                <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-green-500/20 blur-3xl" />
+                <div
+                  className="absolute inset-0 opacity-25"
+                  style={{
+                    backgroundImage: `radial-gradient(rgba(16, 185, 129, 0.5) 1.5px, transparent 1.5px)`,
+                    backgroundSize: '20px 20px'
+                  }}
+                />
+              </>
+            )}
+          </div>
+        )}
+
         {/* Primary Pane */}
         <div
-          className={`relative flex-1 h-full overflow-hidden transition-all duration-200 cursor-text ${
+          className={`relative z-10 flex-1 h-full overflow-hidden transition-all duration-200 cursor-text ${
             splitMode !== 'none'
               ? activePane === 'primary'
                 ? 'border-2 border-sky-500/70 shadow-inner'
@@ -1221,7 +1278,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {/* Secondary Split Pane */}
         {splitMode !== 'none' && (
           <div
-            className={`relative flex-1 h-full overflow-hidden transition-all duration-200 cursor-text ${
+            className={`relative z-10 flex-1 h-full overflow-hidden transition-all duration-200 cursor-text ${
               splitMode === 'vertical' ? 'border-l border-slate-700/80' : 'border-t border-slate-700/80'
             } ${
               activePane === 'secondary'

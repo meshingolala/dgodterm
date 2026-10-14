@@ -67,8 +67,7 @@ async function createWindow() {
       minHeight: 700,
       show: false,
       title: 'DgodTerm — Secure SSH & Ansible Fleet Automation',
-      backgroundColor: '#00000000',
-      backgroundMaterial: 'acrylic',
+      backgroundColor: '#090d16',
       icon: iconPath || undefined,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),

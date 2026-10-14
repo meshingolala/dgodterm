@@ -839,6 +839,34 @@ export const SettingsView: React.FC = () => {
                     );
                   })}
                 </div>
+
+                {/* Backdrop Pattern Selection */}
+                <div className="pt-2 border-t border-slate-850">
+                  <label className="text-xs text-slate-400 block mb-2 font-medium">
+                    Terminal Session Backdrop Mesh (Visible When Transparent)
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { id: 'cyber-grid', label: 'Cyber Grid' },
+                      { id: 'aurora', label: 'Aurora Glow' },
+                      { id: 'deep-space', label: 'Deep Space' },
+                      { id: 'matrix', label: 'Matrix Grid' },
+                      { id: 'solid', label: 'Solid Flat' },
+                    ].map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => handleUpdateTerminalSetting('backdropStyle', b.id as any)}
+                        className={`p-2 rounded-lg border text-xs text-center transition cursor-pointer ${
+                          (terminalSettings.backdropStyle || 'cyber-grid') === b.id
+                            ? 'bg-sky-600/30 border-sky-500 text-sky-200 font-bold'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 

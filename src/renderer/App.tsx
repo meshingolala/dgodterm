@@ -862,7 +862,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`flex h-screen w-screen bg-transparent text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'dark'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
+      className={`flex h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'dark'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
       style={{
         fontFamily: uiSettings.appFontFamily || "'Inter', system-ui, -apple-system, sans-serif",
         fontSize: `${uiSettings.appFontSize || 13}px`
@@ -870,7 +870,7 @@ export const App: React.FC = () => {
     >
       {/* Sidebar */}
       <div
-        className={`bg-slate-950/95 backdrop-blur-md border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
+        className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
           isSidebarCollapsed ? 'w-0 border-r-0 p-0 opacity-0 pointer-events-none' : ''
         } ${
           isDraggingSidebar ? 'select-none transition-none' : ''
@@ -1426,7 +1426,7 @@ export const App: React.FC = () => {
       {/* Main Workspace & Tabs */}
       <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         {/* Top Tab Bar */}
-        <div className="h-10 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 flex items-center px-2 gap-1 shrink-0 relative z-30">
+        <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center px-2 gap-1 shrink-0 relative z-30">
           {/* Expand Sidebar Toggle (shown when collapsed) */}
           {isSidebarCollapsed && (
             <button
@@ -1792,7 +1792,7 @@ export const App: React.FC = () => {
         })()}
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-hidden relative bg-transparent">
+        <div className="flex-1 overflow-hidden relative bg-[#090d16]">
           {tabs.map((tab) => {
             if (tab.type !== 'terminal' || !tab.sessionId || !tab.profile) return null;
             const isVisible = tab.id === activeTabId;
