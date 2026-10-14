@@ -30,9 +30,14 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
     isUnlocked: boolean;
     hint: string | null;
     mfaEnabled: boolean;
-  } | null>(null);
+  }>({
+    isConfigured: true,
+    isUnlocked: false,
+    hint: null,
+    mfaEnabled: false
+  });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Login form state
   const [password, setPassword] = useState('');
@@ -70,21 +75,17 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
   const checkStatus = async () => {
     try {
-      setLoading(true);
       const status = await (window as any).dgodterm.getVaultStatus();
-      setAuthStatus(status);
-
-      // Only bypass if both unlocked in-memory AND current window session is authenticated
-      if (status && !status.isConfigured) {
-        // Will show first time setup
-      } else if (status?.isUnlocked && sessionStorage.getItem('dgodterm_session_auth') === 'true') {
-        onAuthenticated();
+      if (status) {
+        setAuthStatus(status);
+        if (status.isUnlocked && sessionStorage.getItem('dgodterm_session_auth') === 'true') {
+          onAuthenticated();
+        }
       }
     } catch (e) {
       console.error('Failed to get auth status:', e);
     } finally {
-      setLoading(false);
-      setTimeout(() => passwordInputRef.current?.focus(), 100);
+      setTimeout(() => passwordInputRef.current?.focus(), 50);
     }
   };
 
@@ -258,16 +259,6 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
     setTimeout(() => setCopiedSecret(false), 2000);
   };
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090d16] text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-slate-400 font-mono">Securing Workstation Environment...</span>
-        </div>
-      </div>
-    );
-  }
 
   // First-time configuration screen
   if (authStatus && !authStatus.isConfigured) {

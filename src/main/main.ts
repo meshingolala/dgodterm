@@ -65,7 +65,7 @@ async function createWindow() {
       height: 920,
       minWidth: 1024,
       minHeight: 700,
-      show: true,
+      show: false,
       title: 'DgodTerm — Secure SSH & Ansible Fleet Automation',
       backgroundColor: '#090d16',
       icon: iconPath || undefined,
@@ -155,8 +155,15 @@ async function createWindow() {
       }
     }
 
-    mainWindow.show();
-    mainWindow.focus();
+    const displayWindow = () => {
+      if (mainWindow && !mainWindow.isVisible()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    };
+
+    mainWindow.once('ready-to-show', displayWindow);
+    setTimeout(displayWindow, 300);
 
     // Minimize to tray on close
     mainWindow.on('close', (event) => {
@@ -839,8 +846,16 @@ function registerIpcHandlers() {
 app.whenReady().then(async () => {
   try {
     registerIpcHandlers();
-    UptimeMonitorService.getInstance().start(30);
     await createWindow();
+
+    // Start background uptime monitor shortly after window has rendered
+    setTimeout(() => {
+      try {
+        UptimeMonitorService.getInstance().start(30);
+      } catch (err) {
+        console.warn('[Main] UptimeMonitor start error:', err);
+      }
+    }, 1500);
 
     // Listen for OS screen lock / suspend events to auto-lock workstation
     try {

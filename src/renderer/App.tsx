@@ -210,6 +210,7 @@ export const App: React.FC = () => {
   const [hostUptimeMap, setHostUptimeMap] = useState<Record<string, any>>({});
 
   useEffect(() => {
+    if (!isAuthenticated || isLocked) return;
     let mounted = true;
     const fetchResources = async () => {
       try {
@@ -225,10 +226,11 @@ export const App: React.FC = () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isAuthenticated, isLocked]);
 
   // Poll uptime status & reachability for dashboard & left sidebar
   useEffect(() => {
+    if (!isAuthenticated || isLocked) return;
     let mounted = true;
     const fetchHostUptime = async () => {
       try {
@@ -254,7 +256,7 @@ export const App: React.FC = () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isAuthenticated, isLocked]);
 
   useEffect(() => {
     const handleSettingsUpdated = () => {
@@ -2158,7 +2160,7 @@ export const App: React.FC = () => {
             } catch {}
             setIsAuthenticated(true);
             setIsLocked(false);
-            setLastActiveTime(Date.now());
+            lastActiveTimeRef.current = Date.now();
           }}
         />
       )}
