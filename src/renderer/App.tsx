@@ -19,7 +19,6 @@ import { ConfigDriftModal } from './components/ConfigDriftModal';
 import { RunbookRunnerModal } from './components/RunbookRunnerModal';
 import { BreakGlassModal } from './components/BreakGlassModal';
 import { AppLoginModal } from './components/AppLoginModal';
-import { TitleBar } from './components/TitleBar';
 import { DashboardView } from './components/DashboardView';
 import { BatchPushModal } from './components/BatchPushModal';
 import { KeyDeployModal } from './components/KeyDeployModal';
@@ -863,19 +862,14 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`flex flex-col h-screen w-screen bg-transparent text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'dark'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
+      className={`flex h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'dark'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
       style={{
         fontFamily: uiSettings.appFontFamily || "'Inter', system-ui, -apple-system, sans-serif",
         fontSize: `${uiSettings.appFontSize || 13}px`
       }}
     >
-      {/* Custom Window Title Bar with Window Controls */}
-      <TitleBar activeSessionTitle={activeTab?.type === 'terminal' ? activeTab.title : undefined} />
-
-      {/* Main Workspace Row (Sidebar + Tab Workspace) */}
-      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
-        {/* Sidebar */}
-        <div
+      {/* Sidebar */}
+      <div
         className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
           isSidebarCollapsed ? 'w-0 border-r-0 p-0 opacity-0 pointer-events-none' : ''
         } ${
@@ -1798,7 +1792,7 @@ export const App: React.FC = () => {
         })()}
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-hidden relative bg-transparent">
+        <div className="flex-1 overflow-hidden relative bg-[#090d16]">
           {tabs.map((tab) => {
             if (tab.type !== 'terminal' || !tab.sessionId || !tab.profile) return null;
             const isVisible = tab.id === activeTabId;
@@ -1992,7 +1986,6 @@ export const App: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
       </div>
 
       {/* Modals */}
