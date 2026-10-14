@@ -163,7 +163,7 @@ async function createWindow() {
     };
 
     mainWindow.once('ready-to-show', displayWindow);
-    setTimeout(displayWindow, 300);
+    setTimeout(displayWindow, 1500);
 
     // Minimize to tray on close
     mainWindow.on('close', (event) => {
