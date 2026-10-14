@@ -30,14 +30,9 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
     isUnlocked: boolean;
     hint: string | null;
     mfaEnabled: boolean;
-  }>({
-    isConfigured: true,
-    isUnlocked: false,
-    hint: null,
-    mfaEnabled: false
-  });
+  } | null>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Login form state
   const [password, setPassword] = useState('');
@@ -73,19 +68,33 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
     checkStatus();
   }, []);
 
+  useEffect(() => {
+    if (!loading && authStatus) {
+      setTimeout(() => passwordInputRef.current?.focus(), 80);
+    }
+  }, [loading, authStatus]);
+
+  useEffect(() => {
+    if (requiresMfaStep) {
+      setTimeout(() => mfaInputRef.current?.focus(), 80);
+    }
+  }, [requiresMfaStep]);
+
   const checkStatus = async () => {
     try {
+      setLoading(true);
       const status = await (window as any).dgodterm.getVaultStatus();
       if (status) {
         setAuthStatus(status);
         if (status.isUnlocked && sessionStorage.getItem('dgodterm_session_auth') === 'true') {
           onAuthenticated();
+          return;
         }
       }
     } catch (e) {
       console.error('Failed to get auth status:', e);
     } finally {
-      setTimeout(() => passwordInputRef.current?.focus(), 50);
+      setLoading(false);
     }
   };
 
@@ -259,6 +268,17 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
     setTimeout(() => setCopiedSecret(false), 2000);
   };
 
+
+  if (loading || !authStatus) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090d16] text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-400 font-mono tracking-wider">Securing Workstation Environment...</span>
+        </div>
+      </div>
+    );
+  }
 
   // First-time configuration screen
   if (authStatus && !authStatus.isConfigured) {
@@ -477,15 +497,31 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                 Workstation Password
                 {requiresMfaStep && (
                   <span className="text-[10px] text-emerald-400 font-normal flex items-center gap-0.5">
-                    <Check className="w-3 h-3" /> Verified
+                    <Check className="w-3 h-3" /> Password Verified
                   </span>
                 )}
               </span>
-              {authStatus?.hint && (
-                <span className="text-[10px] text-slate-500 font-normal">
-                  Hint: {authStatus.hint}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {requiresMfaStep && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequiresMfaStep(false);
+                      setMfaToken('');
+                      setError('');
+                      setTimeout(() => passwordInputRef.current?.focus(), 50);
+                    }}
+                    className="text-[10px] text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                  >
+                    Edit password
+                  </button>
+                )}
+                {authStatus?.hint && (
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    Hint: {authStatus.hint}
+                  </span>
+                )}
+              </div>
             </label>
             <div className="relative">
               <KeyRound className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
@@ -494,6 +530,7 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter master password..."
                 value={password}
+                disabled={isSubmitting || requiresMfaStep}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (requiresMfaStep) {
@@ -502,7 +539,7 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                     setError('');
                   }
                 }}
-                className={`w-full bg-slate-950/80 border ${requiresMfaStep ? 'border-emerald-500/50' : 'border-slate-700/80'} rounded-xl pl-10 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 font-mono transition`}
+                className={`w-full bg-slate-950/80 border ${requiresMfaStep ? 'border-emerald-500/50 opacity-75' : 'border-slate-700/80'} rounded-xl pl-10 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 font-mono transition`}
                 autoFocus
               />
               <button
@@ -528,11 +565,14 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
               <input
                 ref={mfaInputRef}
                 type="text"
+                inputMode="numeric"
                 maxLength={6}
                 placeholder="000 000"
                 value={mfaToken}
+                disabled={isSubmitting}
+                autoFocus
                 onChange={(e) => setMfaToken(e.target.value.replace(/\D/g, ''))}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-center text-sm font-mono tracking-widest text-emerald-300 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-emerald-500/60 rounded-lg p-2.5 text-center text-sm font-mono tracking-widest text-emerald-300 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
               />
               <p className="text-[11px] text-slate-400 text-center">
                 Open Google Authenticator on your mobile phone and enter the 6-digit code.
@@ -549,15 +589,15 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
           <button
             type="submit"
-            disabled={isSubmitting || !password}
+            disabled={isSubmitting || !password || (requiresMfaStep && mfaToken.length !== 6)}
             className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs transition shadow-lg shadow-sky-600/30 flex items-center justify-center gap-2 cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
             {isSubmitting
-              ? (requiresMfaStep ? 'Verifying MFA...' : 'Verifying Password...')
+              ? (requiresMfaStep ? 'Verifying 2FA Code...' : 'Verifying Password...')
               : (requiresMfaStep
-                  ? 'Verify Password & MFA to Unlock'
-                  : (authStatus?.mfaEnabled ? 'Continue' : 'Unlock & Sign In'))}
+                  ? 'Verify 2FA & Unlock'
+                  : (authStatus?.mfaEnabled ? 'Continue to 2FA' : 'Unlock & Sign In'))}
           </button>
         </form>
 

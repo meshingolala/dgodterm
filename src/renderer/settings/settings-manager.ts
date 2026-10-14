@@ -298,6 +298,9 @@ export function hexToRgba(hexOrRgba: string, alpha: number): string {
   if (hexOrRgba.startsWith('rgba')) {
     return hexOrRgba.replace(/[\d\.]+\)$/, `${alpha})`);
   }
+  if (hexOrRgba.startsWith('rgb(')) {
+    return hexOrRgba.replace('rgb(', 'rgba(').replace(/\)$/, `, ${alpha})`);
+  }
   let c = hexOrRgba.replace('#', '');
   if (c.length === 3) {
     c = c.split('').map((x) => x + x).join('');
@@ -310,11 +313,8 @@ export function hexToRgba(hexOrRgba: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function getEffectiveThemeBackground(themeId: string, opacity?: number): string {
+export function getEffectiveThemeBackground(themeId: string): string {
   const theme = TERMINAL_THEMES[themeId] || TERMINAL_THEMES['dgod-dark'];
-  if (opacity !== undefined && opacity < 1.0) {
-    return hexToRgba(theme.background, opacity);
-  }
   return theme.background;
 }
 
@@ -331,9 +331,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   copyOnSelect: false,
   rightClickPaste: true,
   windowPadding: 8,
-  audibleBell: false,
-  backgroundOpacity: 1.0,
-  backdropStyle: 'solid'
+  audibleBell: false
 };
 
 export const DEFAULT_GENERAL_UI_SETTINGS: GeneralUiSettings = {
@@ -360,7 +358,7 @@ export function getTerminalSettings(): TerminalSettings {
     const raw = localStorage.getItem(STORAGE_KEY_TERMINAL);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.themeId && !TERMINAL_THEMES[parsed.themeId]) {
+      if (parsed.themeId && (!TERMINAL_THEMES[parsed.themeId] || parsed.themeId.startsWith('transparent'))) {
         parsed.themeId = 'dgod-dark';
       }
       return { ...DEFAULT_TERMINAL_SETTINGS, ...parsed };

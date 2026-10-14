@@ -11,6 +11,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { ConnectionProfile } from '../../domain/types';
+import { TERMINAL_THEMES, getTerminalSettings } from '../settings/settings-manager';
+import { SessionThemeDropdown } from './SessionThemeDropdown';
 
 export interface ActiveSessionDescriptor {
   sessionId: string;
@@ -38,6 +40,68 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
   const [broadcastInput, setBroadcastInput] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [dangerousConfirm, setDangerousConfirm] = useState<string | null>(null);
+
+  const [activeThemeId, setActiveThemeId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(`dgodterm:session-theme:${currentSessionId}`);
+      if (saved && TERMINAL_THEMES[saved]) return saved;
+      const curProfile = activeSessions.find((s) => s.sessionId === currentSessionId)?.profile;
+      if (curProfile) {
+        const profSaved = localStorage.getItem(`dgodterm:profile-theme:${curProfile.id}`);
+        if (profSaved && TERMINAL_THEMES[profSaved]) return profSaved;
+      }
+    } catch (e) {}
+    const ts = getTerminalSettings();
+    return ts.themeId || 'dgod-dark';
+  });
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`dgodterm:session-theme:${currentSessionId}`);
+      if (saved && TERMINAL_THEMES[saved]) {
+        setActiveThemeId(saved);
+        return;
+      }
+      const curProfile = activeSessions.find((s) => s.sessionId === currentSessionId)?.profile;
+      if (curProfile) {
+        const profSaved = localStorage.getItem(`dgodterm:profile-theme:${curProfile.id}`);
+        if (profSaved && TERMINAL_THEMES[profSaved]) {
+          setActiveThemeId(profSaved);
+          return;
+        }
+      }
+    } catch (e) {}
+    const ts = getTerminalSettings();
+    setActiveThemeId(ts.themeId || 'dgod-dark');
+  }, [currentSessionId, activeSessions]);
+
+  React.useEffect(() => {
+    const handleThemeChange = (e: any) => {
+      if (e.detail?.sessionId === currentSessionId && e.detail?.themeId) {
+        setActiveThemeId(e.detail.themeId);
+      }
+    };
+    window.addEventListener('dgodterm:session-theme-changed', handleThemeChange);
+    return () => {
+      window.removeEventListener('dgodterm:session-theme-changed', handleThemeChange);
+    };
+  }, [currentSessionId]);
+
+  const handleSelectTheme = (newThemeId: string) => {
+    setActiveThemeId(newThemeId);
+    try {
+      localStorage.setItem(`dgodterm:session-theme:${currentSessionId}`, newThemeId);
+      const curProfile = activeSessions.find((s) => s.sessionId === currentSessionId)?.profile;
+      if (curProfile) {
+        localStorage.setItem(`dgodterm:profile-theme:${curProfile.id}`, newThemeId);
+      }
+    } catch (e) {}
+    window.dispatchEvent(
+      new CustomEvent('dgodterm:session-theme-changed', {
+        detail: { sessionId: currentSessionId, themeId: newThemeId }
+      })
+    );
+  };
 
   // Keep selected sessions synchronized if sessions change
   React.useEffect(() => {
@@ -162,8 +226,8 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
           )}
         </div>
 
-        {/* Quick Broadcast Input Box */}
-        {isBroadcasting && (
+        {/* Quick Broadcast Input Box or Session Theme Selector */}
+        {isBroadcasting ? (
           <div className="flex items-center gap-2 flex-1 max-w-xl mx-4">
             <div className="relative flex-1">
               <input
@@ -185,6 +249,14 @@ export const BroadcastBar: React.FC<BroadcastBarProps> = ({
               <Send className="w-3 h-3" />
               <span>Send All</span>
             </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">Session Theme:</span>
+            <SessionThemeDropdown
+              currentThemeId={activeThemeId}
+              onSelectTheme={handleSelectTheme}
+            />
           </div>
         )}
       </div>

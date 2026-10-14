@@ -732,11 +732,6 @@ export const SettingsView: React.FC = () => {
                             style={{ backgroundColor: theme.cursor }}
                           />
                           <span className="text-xs font-bold text-white">{theme.name}</span>
-                          {theme.id.startsWith('transparent') && (
-                            <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase">
-                              TRANSPARENT
-                            </span>
-                          )}
                         </div>
                         {isSelected && (
                           <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30 uppercase">
@@ -752,17 +747,9 @@ export const SettingsView: React.FC = () => {
                       {/* Swatch preview bar */}
                       <div className="relative rounded-lg border border-white/10 overflow-hidden">
                         <div
-                          className="absolute inset-0 opacity-20 pointer-events-none"
-                          style={{
-                            backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-                            backgroundSize: '6px 6px'
-                          }}
-                        />
-                        <div
                           className="relative p-2 flex items-center justify-between"
                           style={{
-                            backgroundColor: theme.background,
-                            backdropFilter: theme.id.startsWith('transparent') ? 'blur(8px)' : undefined
+                            backgroundColor: theme.background
                           }}
                         >
                           <span className="text-[10px] font-mono px-1 font-bold" style={{ color: theme.foreground }}>

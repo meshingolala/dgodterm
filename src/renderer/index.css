@@ -129,6 +129,12 @@ code, kbd, samp, pre, .font-mono, .xterm, .xterm * {
   overflow-y: auto !important;
 }
 
+.xterm,
+.xterm .xterm-viewport,
+.xterm .xterm-screen {
+  background-color: transparent !important;
+}
+
 /* Universal dark mode rules for native form selects & options */
 select {
   color-scheme: dark;

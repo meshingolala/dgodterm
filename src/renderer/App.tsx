@@ -573,9 +573,13 @@ export const App: React.FC = () => {
       }
     };
     if (showNewTabDropdown || showFleetDropdown) {
-      document.addEventListener('click', handleClickOutside);
+      window.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('click', handleClickOutside);
     }
-    return () => document.removeEventListener('click', handleClickOutside);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('click', handleClickOutside);
+    };
   }, [showNewTabDropdown, showFleetDropdown]);
 
   const handleOpenLocalTerminal = (shellId: 'powershell' | 'cmd' | 'wsl') => {

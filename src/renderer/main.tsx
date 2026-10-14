@@ -7,7 +7,7 @@ import './index.css';
 window.addEventListener('error', (event) => {
   console.error('[Global Error]', event.error || event.message);
   const root = document.getElementById('root');
-  if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+  if (root) {
     root.innerHTML = `<div style="padding:32px;background:#1e1014;color:#f87171;font-family:monospace">
       <h2>Global Script Error</h2>
       <pre>${event.message}\n${event.filename}:${event.lineno}:${event.colno}\n${event.error?.stack || ''}</pre>

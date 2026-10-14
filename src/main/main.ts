@@ -34,6 +34,20 @@ if (!fs.existsSync(userDataPath)) {
 app.setPath('userData', userDataPath);
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
+// Enforce single running instance to avoid process/file locks
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;

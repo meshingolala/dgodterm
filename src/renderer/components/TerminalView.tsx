@@ -48,6 +48,7 @@ import { HostNotesModal } from './HostNotesModal';
 import { DistroIcon } from './DistroIcon';
 import { ProcessManagerModal } from './ProcessManagerModal';
 import { AICopilotPanel } from './AICopilotPanel';
+import { SessionThemeDropdown } from './SessionThemeDropdown';
 import { SessionRecording } from '../../domain/types';
 
 import { checkDestructiveCommand, DestructiveCommandAlert } from '../utils/command-safety';
@@ -247,31 +248,100 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
     if (showToolsDropdown) {
       window.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('click', handleClickOutside);
     }
-    return () => window.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('click', handleClickOutside);
+    };
   }, [showToolsDropdown]);
 
-  const [currentThemeBg, setCurrentThemeBg] = useState(() => {
+  const [sessionThemeId, setSessionThemeId] = useState<string>(() => {
+    try {
+      const sessionSaved = localStorage.getItem(`dgodterm:session-theme:${sessionId}`);
+      if (sessionSaved && TERMINAL_THEMES[sessionSaved]) return sessionSaved;
+      const profileSaved = localStorage.getItem(`dgodterm:profile-theme:${profile.id}`);
+      if (profileSaved && TERMINAL_THEMES[profileSaved]) return profileSaved;
+    } catch (e) {}
     const ts = getTerminalSettings();
-    return getEffectiveThemeBackground(ts.themeId, ts.backgroundOpacity);
+    return ts.themeId && TERMINAL_THEMES[ts.themeId] ? ts.themeId : 'dgod-dark';
+  });
+
+  const [currentThemeBg, setCurrentThemeBg] = useState(() => {
+    return getEffectiveThemeBackground(sessionThemeId);
   });
   const [paddingPx, setPaddingPx] = useState(() => {
     return getTerminalSettings().windowPadding ?? 8;
   });
-  const [backdropStyle, setBackdropStyle] = useState<string>(() => {
-    return getTerminalSettings().backdropStyle || 'cyber-grid';
-  });
+
+  const handleSelectSessionTheme = (newThemeId: string, announce = true) => {
+    const themeDef = TERMINAL_THEMES[newThemeId] || TERMINAL_THEMES['dgod-dark'];
+    const effectiveBg = getEffectiveThemeBackground(newThemeId);
+    setSessionThemeId(newThemeId);
+    setCurrentThemeBg(effectiveBg);
+
+    try {
+      localStorage.setItem(`dgodterm:session-theme:${sessionId}`, newThemeId);
+      localStorage.setItem(`dgodterm:profile-theme:${profile.id}`, newThemeId);
+    } catch (e) {}
+
+    const curSettings = getTerminalSettings();
+    if (xtermInstance.current) {
+      xtermInstance.current.options.theme = {
+        ...themeDef,
+        background: effectiveBg,
+        cursor: curSettings.cursorColor || themeDef.cursor
+      };
+      try {
+        (xtermInstance.current as any).refresh?.(0, xtermInstance.current.rows - 1);
+      } catch (e) {}
+    }
+
+    if (secondaryXtermInstance.current) {
+      secondaryXtermInstance.current.options.theme = {
+        ...themeDef,
+        background: effectiveBg,
+        cursor: curSettings.cursorColor || themeDef.cursor
+      };
+      try {
+        (secondaryXtermInstance.current as any).refresh?.(0, secondaryXtermInstance.current.rows - 1);
+      } catch (e) {}
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('dgodterm:session-theme-changed', {
+        detail: { sessionId, profileId: profile.id, themeId: newThemeId }
+      })
+    );
+
+    if (announce) {
+      showToast(`Theme: ${themeDef.name}`);
+    }
+  };
+
+  useEffect(() => {
+    const handleRemoteThemeChange = (e: any) => {
+      if (e.detail?.sessionId === sessionId && e.detail?.themeId) {
+        if (e.detail.themeId !== sessionThemeId) {
+          handleSelectSessionTheme(e.detail.themeId, false);
+        }
+      }
+    };
+    window.addEventListener('dgodterm:session-theme-changed', handleRemoteThemeChange);
+    return () => {
+      window.removeEventListener('dgodterm:session-theme-changed', handleRemoteThemeChange);
+    };
+  }, [sessionId, sessionThemeId, profile.id]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
 
     const initialSettings = getTerminalSettings();
-    const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
-    const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
-    const initialIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
+    const activeTheme = TERMINAL_THEMES[sessionThemeId] || TERMINAL_THEMES['dgod-dark'];
+    const effectiveBg = getEffectiveThemeBackground(sessionThemeId);
 
     const term = new XTerm({
-      allowTransparency: true,
+      allowTransparency: false,
       cursorBlink: initialSettings.cursorBlink,
       cursorStyle: initialSettings.cursorStyle,
       fontFamily: initialSettings.fontFamily,
@@ -281,7 +351,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
-        background: initialIsTransparent ? 'transparent' : effectiveBg,
+        background: effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -498,18 +568,37 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       term.options.fontWeight = updated.fontWeight as any;
       term.options.cursorStyle = updated.cursorStyle;
       term.options.cursorBlink = updated.cursorBlink;
-      term.options.scrollback = updated.scrollback;
-      const themeDef = TERMINAL_THEMES[updated.themeId] || TERMINAL_THEMES['dgod-dark'];
-      const effectiveBg = getEffectiveThemeBackground(updated.themeId, updated.backgroundOpacity);
-      const updatedIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
+      let targetThemeId = sessionThemeId;
+      try {
+        const hasSpecific = localStorage.getItem(`dgodterm:session-theme:${sessionId}`) ||
+                            localStorage.getItem(`dgodterm:profile-theme:${profile.id}`);
+        if (!hasSpecific) {
+          targetThemeId = updated.themeId;
+          setSessionThemeId(updated.themeId);
+        }
+      } catch (e) {}
+      const themeDef = TERMINAL_THEMES[targetThemeId] || TERMINAL_THEMES['dgod-dark'];
+      const effectiveBg = getEffectiveThemeBackground(targetThemeId);
       term.options.theme = {
         ...themeDef,
-        background: updatedIsTransparent ? 'transparent' : effectiveBg,
+        background: effectiveBg,
         cursor: updated.cursorColor || themeDef.cursor
       };
       setCurrentThemeBg(effectiveBg);
       setPaddingPx(updated.windowPadding ?? 8);
-      setBackdropStyle(updated.backdropStyle || 'cyber-grid');
+      try {
+        (term as any).refresh?.(0, term.rows - 1);
+      } catch (e) {}
+      if (secondaryXtermInstance.current) {
+        secondaryXtermInstance.current.options.theme = {
+          ...themeDef,
+          background: effectiveBg,
+          cursor: updated.cursorColor || themeDef.cursor
+        };
+        try {
+          (secondaryXtermInstance.current as any).refresh?.(0, secondaryXtermInstance.current.rows - 1);
+        } catch (e) {}
+      }
       setTimeout(() => {
         fitAddon.fit();
         (window as any).dgodterm.resizeSSH(sessionId, term.cols, term.rows);
@@ -629,6 +718,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && xtermInstance.current) {
+      const curSettings = getTerminalSettings();
+      const themeDef = TERMINAL_THEMES[sessionThemeId] || TERMINAL_THEMES['dgod-dark'];
+      const effectiveBg = getEffectiveThemeBackground(sessionThemeId);
+      xtermInstance.current.options.theme = {
+        ...themeDef,
+        background: effectiveBg,
+        cursor: curSettings.cursorColor || themeDef.cursor
+      };
+      setCurrentThemeBg(effectiveBg);
+      setPaddingPx(curSettings.windowPadding ?? 8);
+      try {
+        (xtermInstance.current as any).refresh?.(0, xtermInstance.current.rows - 1);
+      } catch (e) {}
+      if (secondaryXtermInstance.current) {
+        secondaryXtermInstance.current.options.theme = {
+          ...themeDef,
+          background: effectiveBg,
+          cursor: curSettings.cursorColor || themeDef.cursor
+        };
+        try {
+          (secondaryXtermInstance.current as any).refresh?.(0, secondaryXtermInstance.current.rows - 1);
+        } catch (e) {}
+      }
       const timer = setTimeout(() => {
         try {
           fitAddonRef.current?.fit();
@@ -637,19 +749,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [isActive]);
+  }, [isActive, sessionThemeId]);
 
   // Split pane terminal initialization and lifecycle
   useEffect(() => {
     if (!secondarySessionId || !secondaryTerminalRef.current) return;
 
     const initialSettings = getTerminalSettings();
-    const activeTheme = TERMINAL_THEMES[initialSettings.themeId] || TERMINAL_THEMES['dgod-dark'];
-    const effectiveBg = getEffectiveThemeBackground(initialSettings.themeId, initialSettings.backgroundOpacity);
-    const initialIsTransparent = effectiveBg.startsWith('rgba') || effectiveBg === 'transparent';
+    const activeTheme = TERMINAL_THEMES[sessionThemeId] || TERMINAL_THEMES['dgod-dark'];
+    const effectiveBg = getEffectiveThemeBackground(sessionThemeId);
 
     const secTerm = new XTerm({
-      allowTransparency: true,
+      allowTransparency: false,
       cursorBlink: initialSettings.cursorBlink,
       cursorStyle: initialSettings.cursorStyle,
       fontFamily: initialSettings.fontFamily,
@@ -659,7 +770,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       scrollback: initialSettings.scrollback,
       theme: {
         ...activeTheme,
-        background: initialIsTransparent ? 'transparent' : effectiveBg,
+        background: effectiveBg,
         cursor: initialSettings.cursorColor || activeTheme.cursor
       }
     });
@@ -833,7 +944,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   return (
     <div className="flex flex-col h-full w-full transition-colors duration-200 bg-transparent">
       {/* Session Host Identity Banner */}
-      <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-xs text-slate-300">
+      <div className="relative z-30 flex items-center justify-between px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-xs text-slate-300">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-medium">
             <DistroIcon flavor={currentProfile.os_flavor} className="w-3.5 h-3.5 text-sky-400 shrink-0" />
@@ -848,7 +959,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
           {/* Production Visual Safeguard Badge */}
           {((profile.tags || []).some((t) => /prod/i.test(t)) || /prod/i.test(profile.display_name)) && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/80 border border-red-500/60 text-red-200 text-[10px] font-bold uppercase tracking-wider animate-pulse shadow-sm shadow-red-950/50">
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-red-950/80 border border-red-500/60 text-red-200 text-[10px] font-bold uppercase tracking-wider animate-pulse shadow-sm shadow-red-950/50">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
               <span>PRODUCTION HOST</span>
             </div>
@@ -923,16 +1034,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             </button>
           )}
 
+          {/* Inbuilt Themes Dropdown for this Session */}
+          <SessionThemeDropdown
+            currentThemeId={sessionThemeId}
+            onSelectTheme={handleSelectSessionTheme}
+          />
+
           {/* Unified Host Tools Dropdown Menu */}
-          <div className="relative shrink-0" ref={toolsDropdownRef}>
+          <div className="relative shrink-0 z-40" ref={toolsDropdownRef}>
             <button
-              onClick={() => setShowToolsDropdown(!showToolsDropdown)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowToolsDropdown((prev) => !prev);
+              }}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold shadow-sm transition cursor-pointer ${
                 showToolsDropdown || showHealthMonitor || isRecording || showAICopilot
                   ? 'bg-sky-950/90 border-sky-500/70 text-sky-200 shadow-sky-950/50'
                   : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
               }`}
-              title="Host Diagnostics, Telemetry, Audits & Viewport Multiplexing"
+              title="Fleet & Host Diagnostics, Telemetry, Audits & Viewport Multiplexing"
             >
               <Wrench className="w-3.5 h-3.5 text-sky-400" />
               <span>Host Tools</span>
@@ -940,7 +1062,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             </button>
 
             {showToolsDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl py-1.5 text-xs text-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl py-1.5 text-xs text-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 select-none pointer-events-auto"
+              >
                 {/* Telemetry & System Inspector */}
                 <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span>Diagnostics & System</span>
@@ -1195,7 +1320,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       )}
 
       {/* Terminal Viewport / Multiplexer Panes */}
-      <div className={`flex-1 w-full overflow-hidden flex relative bg-[#090d16] ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}>
+      <div
+        className={`flex-1 w-full overflow-hidden flex relative ${splitMode === 'horizontal' ? 'flex-col' : 'flex-row'}`}
+        style={{ backgroundColor: currentThemeBg }}
+      >
         {/* Primary Pane */}
         <div
           className={`relative z-10 flex-1 h-full overflow-hidden transition-all duration-200 cursor-text ${
