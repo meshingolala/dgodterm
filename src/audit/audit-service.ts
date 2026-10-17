@@ -82,12 +82,12 @@ export class AuditService {
     return event;
   }
 
-  public getEvents(limit = 200): AuditEvent[] {
+  public getEvents(limit?: number): AuditEvent[] {
     return dbOperations.getAuditEvents(limit);
   }
 
   /**
-   * Verifies the cryptographic hash integrity of the audit log chain.
+   * Verifies the cryptographic hash integrity of the entire audit log chain from genesis.
    */
   public verifyAuditIntegrity(): {
     isValid: boolean;
@@ -95,7 +95,7 @@ export class AuditService {
     tamperedEventIndex: number | null;
     message: string;
   } {
-    const events = dbOperations.getAuditEvents(1000);
+    const events = dbOperations.getAuditEvents(-1);
     // Sort chronological (oldest to newest)
     const chronological = [...events].sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
 

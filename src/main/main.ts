@@ -623,7 +623,7 @@ function registerIpcHandlers() {
       nodeVersion: process.version,
       electronVersion: process.versions.electron,
       profilesCount: dbOperations.getProfiles().length,
-      auditEventsCount: dbOperations.getAuditEvents().length,
+      auditEventsCount: dbOperations.countAuditEvents(),
       hostTrustRecordsCount: dbOperations.getHostTrustRecords().length,
       activePolicy: policy.getActivePolicy(),
       integrityStatus: audit.verifyAuditIntegrity()

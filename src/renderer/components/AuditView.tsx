@@ -17,6 +17,9 @@ import {
 export const AuditView: React.FC = () => {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'session' | 'sftp' | 'automation' | 'vault' | 'security'>('all');
+  const [outcomeFilter, setOutcomeFilter] = useState<'all' | 'success' | 'failure' | 'denied'>('all');
+  const [queryLimit, setQueryLimit] = useState<number>(200);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [integrityStatus, setIntegrityStatus] = useState<{
     tested: boolean;
@@ -27,13 +30,14 @@ export const AuditView: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
-    loadEvents();
-  }, []);
+    loadEvents(queryLimit);
+    handleVerifyIntegrity();
+  }, [queryLimit]);
 
-  const loadEvents = async () => {
+  const loadEvents = async (limitVal = queryLimit) => {
     try {
-      const data = await (window as any).dgodterm.getAuditEvents(200);
-      setEvents(data);
+      const data = await (window as any).dgodterm.getAuditEvents(limitVal);
+      setEvents(data || []);
     } catch (e) {
       console.error(e);
     }
@@ -75,13 +79,28 @@ export const AuditView: React.FC = () => {
 
   const filtered = events.filter((ev) => {
     const s = search.toLowerCase();
-    return (
+    const matchesSearch =
+      !s ||
       ev.event_type.toLowerCase().includes(s) ||
       ev.action.toLowerCase().includes(s) ||
       ev.actor_id.toLowerCase().includes(s) ||
       (ev.resource_id && ev.resource_id.toLowerCase().includes(s)) ||
-      (ev.change_reference && ev.change_reference.toLowerCase().includes(s))
-    );
+      (ev.change_reference && ev.change_reference.toLowerCase().includes(s));
+
+    if (!matchesSearch) return false;
+
+    if (outcomeFilter !== 'all' && ev.outcome !== outcomeFilter) return false;
+
+    if (categoryFilter !== 'all') {
+      const t = ev.event_type.toLowerCase();
+      if (categoryFilter === 'session' && !t.startsWith('session_')) return false;
+      if (categoryFilter === 'sftp' && !t.startsWith('sftp_')) return false;
+      if (categoryFilter === 'automation' && !t.startsWith('automation_') && !t.startsWith('runbook_') && !t.startsWith('configuration_')) return false;
+      if (categoryFilter === 'vault' && !t.startsWith('vault_') && !t.startsWith('mfa_')) return false;
+      if (categoryFilter === 'security' && !t.startsWith('host_trust_') && !t.startsWith('breakglass_') && !t.startsWith('policy_')) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -98,7 +117,16 @@ export const AuditView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => loadEvents(queryLimit)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
+            title="Refresh Audit Log"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+
           <button
             onClick={handleVerifyIntegrity}
             disabled={verifying}
@@ -140,26 +168,79 @@ export const AuditView: React.FC = () => {
             <span className="font-medium">{integrityStatus.message}</span>
           </div>
           <span className="font-mono text-[11px] opacity-80">
-            All SHA-256 hash chain links strictly intact
+            {integrityStatus.valid ? 'All SHA-256 hash chain links strictly intact' : 'Hash link verification mismatch detected'}
           </span>
         </div>
       )}
 
-      {/* Search Toolbar */}
-      <div className="p-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 w-80">
-          <Search className="w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search by action, actor, resource, or ticket..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent text-xs text-slate-200 outline-none w-full"
-          />
+      {/* Search & Filter Toolbar */}
+      <div className="p-4 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 w-72">
+            <Search className="w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search action, actor, resource, ticket..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent text-xs text-slate-200 outline-none w-full"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="text-slate-500 hover:text-slate-300">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px]">
+            {([
+              { id: 'all', label: 'All' },
+              { id: 'session', label: 'SSH' },
+              { id: 'sftp', label: 'SFTP' },
+              { id: 'automation', label: 'Ansible' },
+              { id: 'vault', label: 'Vault' },
+              { id: 'security', label: 'Security' }
+            ] as const).map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                className={`px-2.5 py-1 rounded-md font-medium transition ${
+                  categoryFilter === cat.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Outcome Filter */}
+          <select
+            value={outcomeFilter}
+            onChange={(e) => setOutcomeFilter(e.target.value as any)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500"
+          >
+            <option value="all">All Outcomes</option>
+            <option value="success">Success Only</option>
+            <option value="failure">Failures Only</option>
+            <option value="denied">Policy Denied</option>
+          </select>
+
+          {/* Limit Selector */}
+          <select
+            value={queryLimit}
+            onChange={(e) => setQueryLimit(Number(e.target.value))}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500"
+          >
+            <option value={200}>Latest 200</option>
+            <option value={500}>Latest 500</option>
+            <option value={-1}>All Events ({integrityStatus.total || events.length})</option>
+          </select>
         </div>
 
         <div className="text-xs text-slate-400">
-          Showing <span className="text-white font-semibold">{filtered.length}</span> recorded security events
+          Showing <span className="text-white font-semibold">{filtered.length}</span> of{' '}
+          <span className="text-slate-300 font-semibold">{integrityStatus.total || events.length}</span> events
         </div>
       </div>
 

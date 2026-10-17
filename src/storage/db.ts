@@ -258,8 +258,17 @@ export async function initializeDatabase(): Promise<Database> {
 function saveDatabase(): void {
   if (!db || !dbFilePath) return;
   try {
-    const data = db.export();
-    fs.writeFileSync(dbFilePath, Buffer.from(data));
+    const data = Buffer.from(db.export());
+    const tmpPath = `${dbFilePath}.tmp`;
+    fs.writeFileSync(tmpPath, data);
+    try {
+      fs.renameSync(tmpPath, dbFilePath);
+    } catch {
+      fs.writeFileSync(dbFilePath, data);
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {}
+    }
   } catch (err) {
     console.error('Failed to persist database file:', err);
   }
@@ -470,6 +479,14 @@ function runMigrations(database: Database): void {
   } catch {
     // Column already exists
   }
+
+  // Ensure performance indexes exist for high-volume tables
+  database.run(`
+    CREATE INDEX IF NOT EXISTS idx_audit_events_occurred_at ON audit_events(occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_events_type ON audit_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_automation_runs_requested_at ON automation_runs(requested_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_profiles_folder_id ON profiles(folder_id);
+  `);
 }
 
 function seedInitialData(database: Database): void {
@@ -987,9 +1004,10 @@ export const dbOperations = {
   },
 
   // Audit Events
-  getAuditEvents(limit = 200): AuditEvent[] {
+  getAuditEvents(limit?: number): AuditEvent[] {
     if (!db) return [];
-    const res = db.exec(`SELECT * FROM audit_events ORDER BY occurred_at DESC LIMIT ${limit}`);
+    const limitClause = typeof limit === 'number' && limit > 0 ? ` LIMIT ${Math.floor(limit)}` : '';
+    const res = db.exec(`SELECT * FROM audit_events ORDER BY occurred_at DESC${limitClause}`);
     if (!res[0]) return [];
     const cols = res[0].columns;
     return res[0].values.map((row) => {
@@ -1015,6 +1033,12 @@ export const dbOperations = {
         integrity_link: obj.integrity_link as string
       };
     });
+  },
+
+  countAuditEvents(): number {
+    if (!db) return 0;
+    const res = db.exec('SELECT COUNT(*) FROM audit_events');
+    return (res[0]?.values?.[0]?.[0] as number) || 0;
   },
 
   getLatestAuditIntegrityLink(): string {

@@ -539,7 +539,7 @@ export async function startWebServer(): Promise<void> {
                 arch: process.arch,
                 nodeVersion: process.version,
                 profilesCount: dbOperations.getProfiles().length,
-                auditEventsCount: dbOperations.getAuditEvents().length,
+                auditEventsCount: dbOperations.countAuditEvents(),
                 hostTrustRecordsCount: dbOperations.getHostTrustRecords().length,
                 activePolicy: policy.getActivePolicy(),
                 integrityStatus: audit.verifyAuditIntegrity()

@@ -208,6 +208,11 @@ export const AnsibleView: React.FC = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Run History & Compliance Manifests
+  const [automationRuns, setAutomationRuns] = useState<AutomationRunManifest[]>([]);
+  const [showRunHistoryModal, setShowRunHistoryModal] = useState(false);
+  const [selectedHistoryRun, setSelectedHistoryRun] = useState<AutomationRunManifest | null>(null);
+
   // Settings & Rollout
   const [environment, setEnvironment] = useState<'production' | 'staging' | 'development'>('development');
   const [limitFilter, setLimitFilter] = useState('');
@@ -364,6 +369,9 @@ export const AnsibleView: React.FC = () => {
       } else if (ev.type === 'cancelled' || ev.type === 'failed') {
         setLogs((prev) => [...prev, `[HALT] ${ev.message}`]);
         setExecuting(false);
+        (window as any).dgodterm.getAutomationRuns?.().then((runs: AutomationRunManifest[]) => {
+          if (Array.isArray(runs)) setAutomationRuns(runs);
+        }).catch(() => {});
       } else if (ev.type === 'completed') {
         setProgressPercent(100);
         setLogs((prev) => [...prev, `[FINISHED] ${ev.message}`]);
@@ -371,6 +379,9 @@ export const AnsibleView: React.FC = () => {
         if (ev.manifest) {
           setCompletedManifest(ev.manifest);
         }
+        (window as any).dgodterm.getAutomationRuns?.().then((runs: AutomationRunManifest[]) => {
+          if (Array.isArray(runs)) setAutomationRuns(runs);
+        }).catch(() => {});
       } else if (ev.type === 'log') {
         setLogs((prev) => [...prev, ...splitMsg(ev.message)]);
       }
@@ -390,10 +401,15 @@ export const AnsibleView: React.FC = () => {
       const f: Folder[] = (await (window as any).dgodterm.getFolders?.()) || [];
       const v: any[] = (await (window as any).dgodterm.getVaultCredentials?.()) || [];
       const pbs: SavedPlaybook[] = (await (window as any).dgodterm.getPlaybooks?.()) || [];
+      const runs: AutomationRunManifest[] = (await (window as any).dgodterm.getAutomationRuns?.()) || [];
       setProfiles(p);
       setFolders(f);
       setVaultCredentials(v);
       setSavedPlaybooks(pbs);
+      setAutomationRuns(runs);
+      if (runs.length > 0 && !selectedHistoryRun) {
+        setSelectedHistoryRun(runs[0]);
+      }
       if (pbs.length > 0 && !pbs.some((pb) => pb.filename === playbookPath)) {
         setPlaybookPath(pbs[0].filename);
       }
@@ -822,6 +838,27 @@ export const AnsibleView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const runs = (await (window as any).dgodterm.getAutomationRuns?.()) || [];
+                setAutomationRuns(runs);
+                if (runs.length > 0 && !selectedHistoryRun) {
+                  setSelectedHistoryRun(runs[0]);
+                }
+              } catch {}
+              setShowRunHistoryModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition shadow-sm"
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Run History</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-[10px] font-bold">
+              {automationRuns.length}
+            </span>
+          </button>
+
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 text-xs">
             <Server className="w-3.5 h-3.5 text-sky-400" />
             <span className="text-slate-300">Fleet Targets:</span>
@@ -2207,6 +2244,255 @@ export const AnsibleView: React.FC = () => {
           initialPlaybook={editingPlaybook}
           initialContent={editingPlaybook ? undefined : customPlaybookYaml}
         />
+      )}
+
+      {/* Run History & Compliance Manifests Modal */}
+      {showRunHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-5xl h-[82vh] rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-indigo-400" />
+                  Ansible Execution History & ISO 27001 Compliance Manifests
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Cryptographically signed execution records (<span className="font-mono text-emerald-400">manifest_hash</span>) stored in local SQLite ledger.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRunHistoryModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 grid grid-cols-12 overflow-hidden">
+              {/* Left List (5 cols) */}
+              <div className="col-span-5 border-r border-slate-800 bg-slate-950/50 overflow-y-auto p-3 space-y-2">
+                {automationRuns.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 text-xs">
+                    <Clock className="w-8 h-8 mb-2 opacity-40" />
+                    <p className="font-semibold text-slate-400">No Automation Runs Recorded Yet</p>
+                    <p className="mt-1">Execute any playbook or ad-hoc command to generate an immutable compliance manifest.</p>
+                  </div>
+                ) : (
+                  automationRuns.map((run) => {
+                    const hostResults = Object.values(run.per_host_results || {});
+                    const hasFailed = hostResults.some((r: any) => r.failed > 0 || r.unreachable > 0 || r.status === 'failed');
+                    const isSelected = selectedHistoryRun?.run_id === run.run_id;
+                    const durationSec =
+                      run.started_at && run.completed_at
+                        ? Math.max(1, Math.round((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000))
+                        : null;
+
+                    return (
+                      <div
+                        key={run.run_id}
+                        onClick={() => setSelectedHistoryRun(run)}
+                        className={`p-3 rounded-xl border cursor-pointer transition ${
+                          isSelected
+                            ? 'bg-indigo-950/40 border-indigo-500/60 shadow-sm'
+                            : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-100 truncate">
+                            {run.playbook_path}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
+                              hasFailed
+                                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            {hasFailed ? 'FAILED' : 'SUCCESS'}
+                          </span>
+                        </div>
+
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                          <span>{new Date(run.requested_at).toLocaleString()}</span>
+                          <span className="font-mono">
+                            {run.resolved_targets?.length || 0} host(s){durationSec ? ` • ${durationSec}s` : ''}
+                          </span>
+                        </div>
+
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                          <span>ID: {run.run_id.slice(0, 12)}...</span>
+                          <span className="text-emerald-400/80">SHA256: {run.manifest_hash?.slice(0, 10)}...</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right Details (7 cols) */}
+              <div className="col-span-7 overflow-y-auto p-5 space-y-4 bg-slate-900">
+                {selectedHistoryRun ? (
+                  <>
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+                      <div>
+                        <div className="text-xs text-slate-400">Playbook / Task Execution</div>
+                        <h4 className="text-sm font-bold text-white font-mono mt-0.5">
+                          {selectedHistoryRun.playbook_path}
+                        </h4>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Run ID: <span className="font-mono text-slate-300 select-all">{selectedHistoryRun.run_id}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const dataStr =
+                              'data:text/json;charset=utf-8,' +
+                              encodeURIComponent(JSON.stringify(selectedHistoryRun, null, 2));
+                            const a = document.createElement('a');
+                            a.setAttribute('href', dataStr);
+                            a.setAttribute('download', `dgodterm-run-manifest-${selectedHistoryRun.run_id.slice(0, 8)}.json`);
+                            a.click();
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition"
+                        >
+                          <Download className="w-3.5 h-3.5 text-sky-400" />
+                          Export JSON
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompletedManifest(selectedHistoryRun);
+                            if (
+                              selectedHistoryRun.playbook_path &&
+                              !selectedHistoryRun.playbook_path.startsWith('adhoc:')
+                            ) {
+                              setExecutionMode('playbook');
+                              setPlaybookPath(selectedHistoryRun.playbook_path);
+                            }
+                            setShowRunHistoryModal(false);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Load into Workspace
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Metadata Grid */}
+                    <div className="grid grid-cols-3 gap-2.5 text-xs bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Requested By</span>
+                        <span className="text-slate-200 font-medium">{selectedHistoryRun.requested_by}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Started At</span>
+                        <span className="text-slate-200 font-mono text-[11px]">
+                          {selectedHistoryRun.started_at ? new Date(selectedHistoryRun.started_at).toLocaleString() : '-'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Completed At</span>
+                        <span className="text-slate-200 font-mono text-[11px]">
+                          {selectedHistoryRun.completed_at ? new Date(selectedHistoryRun.completed_at).toLocaleString() : '-'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Policy Decision</span>
+                        <span className="text-emerald-400 font-semibold uppercase">{selectedHistoryRun.policy_decision}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Rollout Batch</span>
+                        <span className="text-slate-200 font-mono">
+                          Serial={selectedHistoryRun.rollout?.serial || 1}, MaxFail={selectedHistoryRun.rollout?.failure_threshold || 1}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Change Ticket</span>
+                        <span className="text-slate-200 font-mono">{selectedHistoryRun.change_reference || 'N/A'}</span>
+                      </div>
+                    </div>
+
+                    {/* Cryptographic Hash */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-slate-300">
+                          Immutable SHA-256 Manifest Signature
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyTextToClipboard(selectedHistoryRun.manifest_hash || '')}
+                          className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" /> Copy Hash
+                        </button>
+                      </div>
+                      <div className="bg-slate-950 p-2.5 rounded-lg border border-emerald-900/60 font-mono text-xs text-emerald-400 break-all select-all">
+                        {selectedHistoryRun.manifest_hash}
+                      </div>
+                    </div>
+
+                    {/* Per-Host Recap Table */}
+                    <div>
+                      <span className="text-xs font-semibold text-slate-300 block mb-2">
+                        Per-Host Recap Telemetry ({Object.keys(selectedHistoryRun.per_host_results || {}).length} nodes)
+                      </span>
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left font-mono text-xs">
+                          <thead>
+                            <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                              <th className="py-2 px-3">Host</th>
+                              <th className="py-2 px-2 text-emerald-400">OK</th>
+                              <th className="py-2 px-2 text-amber-400">CHANGED</th>
+                              <th className="py-2 px-2 text-red-400">FAILED</th>
+                              <th className="py-2 px-2 text-slate-400">UNREACHABLE</th>
+                              <th className="py-2 px-3">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(selectedHistoryRun.per_host_results || {}).map(([host, stats]: [string, any]) => (
+                              <tr key={host} className="border-b border-slate-800/50">
+                                <td className="py-2 px-3 text-slate-200 font-semibold">{host}</td>
+                                <td className="py-2 px-2 text-emerald-400">{stats.ok ?? 0}</td>
+                                <td className="py-2 px-2 text-amber-400">{stats.changed ?? 0}</td>
+                                <td className="py-2 px-2 text-red-400">{stats.failed ?? 0}</td>
+                                <td className="py-2 px-2 text-slate-400">{stats.unreachable ?? 0}</td>
+                                <td className="py-2 px-3">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                      stats.status === 'failed' || (stats.failed ?? 0) > 0
+                                        ? 'bg-red-500/20 text-red-300'
+                                        : stats.status === 'changed' || (stats.changed ?? 0) > 0
+                                        ? 'bg-amber-500/20 text-amber-300'
+                                        : 'bg-emerald-500/20 text-emerald-300'
+                                    }`}
+                                  >
+                                    {stats.status || 'ok'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    Select a run from the left panel to inspect its cryptographic manifest.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

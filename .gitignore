@@ -3,8 +3,9 @@ node_modules/
 
 # Production build and installer artifacts
 dist/
-release/
-*.exe
+release/*
+!release/DgodTerm Setup 1.0.0.exe
+/gs_setup.exe
 *.blockmap
 
 # Logs and system files
