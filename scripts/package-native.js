@@ -64,7 +64,9 @@ const prodDeps = [
   'tweetnacl',
   'uuid',
   'ws',
-  'nan'
+  'nan',
+  'js-yaml',
+  'argparse'
 ];
 for (const dep of prodDeps) {
   const src = path.join(rootDir, 'node_modules', dep);
