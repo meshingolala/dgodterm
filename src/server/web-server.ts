@@ -22,6 +22,10 @@ import { RunbookRunnerService } from '../ssh/runbook-runner';
 import { DisasterRecoveryService } from '../storage/disaster-recovery';
 import { getHostSystemResources } from '../domain/system-resources';
 import { invokeFeature } from '../features/registry';
+import { LocalTerminalManager } from '../terminal/local-shell';
+import { X11Manager } from '../ssh/x11-manager';
+import { PuTTYImporter } from '../importers/putty-importer';
+import cp from 'child_process';
 
 const PORT = 5188;
 
@@ -317,6 +321,9 @@ export async function startWebServer(): Promise<void> {
               },
               onPasswordRequired: (prompt) => {
                 send('ssh:password-prompt', { sessionId, prompt });
+              },
+              onOsFlavorDetected: (profileId, flavor, osName) => {
+                send('profile:flavor-detected', { profileId, flavor, osName });
               }
             });
             reply(true);
@@ -524,7 +531,7 @@ export async function startWebServer(): Promise<void> {
           case 'audit:export-bundle':
             reply({
               exported_at: new Date().toISOString(),
-              generator: 'DgodTerm v1.0.0 (ISO/IEC 27001 Evidence Pack)',
+              generator: 'DgodTerm v2.0.0 (ISO/IEC 27001 Evidence Pack)',
               verification: audit.verifyAuditIntegrity(),
               events: audit.getEvents(1000)
             });
@@ -773,6 +780,96 @@ export async function startWebServer(): Promise<void> {
             }
             break;
 
+          // Local Terminals (PowerShell, WSL2, CMD)
+          case 'local:list-shells':
+            reply(LocalTerminalManager.getInstance().getAvailableShells());
+            break;
+          case 'local:spawn':
+            {
+              const { sessionId, shellId, cols, rows } = payload;
+              const res = LocalTerminalManager.getInstance().spawnShell(
+                sessionId,
+                shellId,
+                cols,
+                rows,
+                (data) => send('local:stream-data', { sessionId, data }),
+                (code) => send('local:closed', { sessionId, code })
+              );
+              reply(res);
+            }
+            break;
+          case 'local:data':
+            LocalTerminalManager.getInstance().sendData(payload.sessionId, payload.data);
+            break;
+          case 'local:resize':
+            LocalTerminalManager.getInstance().resizeSession(payload.sessionId, payload.cols, payload.rows);
+            break;
+          case 'local:close':
+            LocalTerminalManager.getInstance().closeSession(payload.sessionId);
+            reply({ closed: true });
+            break;
+
+          // Desktop Notifications & System Idle
+          case 'notification:show':
+            reply({ shown: true });
+            break;
+          case 'system:get-idle-time':
+            reply(0);
+            break;
+
+          // MobaXterm-style X11 Forwarding & Display Management
+          case 'x11:get-status':
+            {
+              const status = await X11Manager.getInstance().getStatus();
+              reply(status);
+            }
+            break;
+          case 'x11:launch-server':
+            {
+              const res = await X11Manager.getInstance().launchServer(payload?.path);
+              reply(res);
+            }
+            break;
+          case 'x11:install-vcxsrv':
+            {
+              const res = await X11Manager.getInstance().installVcXsrv();
+              reply(res);
+            }
+            break;
+
+          // MobaXterm-style PuTTY Session Importer
+          case 'putty:get-sessions':
+            {
+              const sessions = PuTTYImporter.getSavedSessions();
+              reply(sessions);
+            }
+            break;
+          case 'putty:import-sessions':
+            {
+              const sessions = payload?.sessions || PuTTYImporter.getSavedSessions();
+              const profiles = PuTTYImporter.convertToProfiles(sessions, payload?.folderId);
+              for (const p of profiles) {
+                dbOperations.saveProfile(p);
+              }
+              reply({ importedCount: profiles.length, profiles });
+            }
+            break;
+
+          // Native Windows Remote Desktop (RDP) Launcher
+          case 'rdp:launch':
+            {
+              const host = payload?.hostname || '127.0.0.1';
+              const port = payload?.port || 3389;
+              const target = port === 3389 ? host : `${host}:${port}`;
+              const proc = cp.spawn('mstsc.exe', [`/v:${target}`], {
+                detached: true,
+                stdio: 'ignore'
+              });
+              proc.unref();
+              reply({ launched: true, target });
+            }
+            break;
+
           default:
             replyErr(new Error(`Unknown action: ${action}`));
         }
@@ -785,8 +882,8 @@ export async function startWebServer(): Promise<void> {
     });
   });
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DgodTerm] Real SSH Server & Web UI listening at http://localhost:${PORT}`);
+  server.listen(PORT, () => {
+    console.log(`[DgodTerm] Real SSH Server & Web UI listening at http://127.0.0.1:${PORT}`);
   });
 }
 

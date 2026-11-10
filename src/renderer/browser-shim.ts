@@ -10,6 +10,7 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
   const wsUrl = `ws://${window.location.host}/ws`;
   let ws: WebSocket | null = null;
   const pendingRequests = new Map<string, { resolve: Function; reject: Function }>();
+  const outboundQueue: string[] = [];
   const eventListeners: Record<string, Function[]> = {};
 
   const emit = (event: string, ...args: any[]) => {
@@ -35,6 +36,10 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
 
     ws.onopen = () => {
       console.log('[DgodTerm] WebSocket connection established to real SSH backend.');
+      while (outboundQueue.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+        const msg = outboundQueue.shift();
+        if (msg) ws.send(msg);
+      }
     };
 
     ws.onmessage = (event) => {
@@ -64,6 +69,12 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
             emit('ssh:host-prompt', payload.sessionId, payload.result);
           } else if (type === 'ssh:password-prompt') {
             emit('ssh:password-prompt', payload.sessionId, payload.prompt);
+          } else if (type === 'profile:flavor-detected') {
+            emit('profile:flavor-detected', payload);
+          } else if (type === 'local:stream-data') {
+            emit('local:data', payload.sessionId, payload.data);
+          } else if (type === 'local:closed') {
+            emit('local:closed', payload.sessionId, payload.code);
           } else if (type === 'ansible:event') {
             emit('ansible:event', payload);
           }
@@ -72,6 +83,20 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
         console.error('Error handling WS message:', err);
       }
     };
+
+    // Native Windows WebView2 message receiver
+    if ((window as any).chrome?.webview) {
+      try {
+        (window as any).chrome.webview.addEventListener('message', (event: any) => {
+          const data = event.data;
+          if (data && data.type) {
+            emit(data.type, data.payload);
+          }
+        });
+      } catch (e) {
+        console.warn('[DgodTerm] WebView2 message handler initialization warning:', e);
+      }
+    }
 
     ws.onclose = () => {
       console.warn('[DgodTerm] WebSocket closed. Reconnecting in 2s...');
@@ -87,31 +112,24 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
 
   async function invoke(action: string, payload?: any): Promise<any> {
     return new Promise((resolve, reject) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        // Wait a tiny bit if connecting
-        setTimeout(() => {
-          if (!ws || ws.readyState !== WebSocket.OPEN) {
-            reject(new Error('WebSocket not connected to backend.'));
-            return;
-          }
-          sendRequest();
-        }, 300);
-        return;
-      }
+      const id = Math.random().toString(36).substring(2, 10);
+      pendingRequests.set(id, { resolve, reject });
+      const raw = JSON.stringify({ id, action, payload });
 
-      sendRequest();
-
-      function sendRequest() {
-        const id = Math.random().toString(36).substring(2, 10);
-        pendingRequests.set(id, { resolve, reject });
-        ws!.send(JSON.stringify({ id, action, payload }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(raw);
+      } else {
+        outboundQueue.push(raw);
       }
     });
   }
 
   function send(action: string, payload: any): void {
+    const raw = JSON.stringify({ action, payload });
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ action, payload }));
+      ws.send(raw);
+    } else {
+      outboundQueue.push(raw);
     }
   }
 
@@ -158,6 +176,7 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
     onSSHError: (cb: Function) => addListener('ssh:error', cb),
     onHostVerificationPrompt: (cb: Function) => addListener('ssh:host-prompt', cb),
     onPasswordPrompt: (cb: Function) => addListener('ssh:password-prompt', cb),
+    onProfileFlavorDetected: (cb: Function) => addListener('profile:flavor-detected', cb),
 
     // Host Trust
     getHostTrustRecords: () => invoke('trust:get-records'),
@@ -294,6 +313,104 @@ if (typeof window !== 'undefined' && !(window as any).dgodterm) {
     invokeFeature: (channel: string, payload?: any) =>
       invoke('feature:invoke', { channel, payload }),
     getHostResources: () =>
-      invoke('host:get-resources')
+      invoke('host:get-resources'),
+
+    // Local Terminals (PowerShell, WSL2, Command Prompt)
+    spawnLocalShell: (sessionId: string, shellId: string, cols?: number, rows?: number) =>
+      invoke('local:spawn', { sessionId, shellId, cols, rows }),
+    resizeLocalShell: (sessionId: string, cols: number, rows: number) =>
+      send('local:resize', { sessionId, cols, rows }),
+    sendLocalData: (sessionId: string, data: string) =>
+      send('local:data', { sessionId, data }),
+    closeLocalShell: (sessionId: string) =>
+      invoke('local:close', sessionId),
+    onLocalData: (cb: Function) => addListener('local:data', cb),
+    onLocalClose: (cb: Function) => addListener('local:close', cb),
+
+    // Desktop Notifications
+    showNotification: (title: string, body: string, icon?: string) =>
+      invoke('notification:show', { title, body, icon }),
+
+    // MobaXterm X11 Display Server
+    getX11Status: () => invoke('x11:get-status'),
+    launchX11Server: (path?: string) => invoke('x11:launch-server', { path }),
+    installVcXsrv: () => invoke('x11:install-vcxsrv'),
+
+    // MobaXterm PuTTY Registry Importer
+    getPuTTYAvailableSessions: () => invoke('putty:get-sessions'),
+    importPuTTYProfiles: (sessions?: any[], folderId?: string | null) =>
+      invoke('putty:import-sessions', { sessions, folderId }),
+
+    // Native Remote Desktop (RDP) Launcher
+    launchRdp: (hostname: string, port?: number, username?: string) =>
+      invoke('rdp:launch', { hostname, port, username }),
+
+    // System Idle Time & Lock
+    getSystemIdleTime: () => invoke('system:get-idle-time'),
+    onSystemLockScreen: () => () => {},
+
+    // Native Window Controls (WebView2 / Win32)
+    isNativeHost: !!((window as any).chrome?.webview),
+    syncTabsToNative: (tabs: any[], activeTabId: string, tabStyle?: string, accentColor?: string) => {
+      if ((window as any).chrome?.webview) {
+        try {
+          (window as any).chrome.webview.postMessage({
+            type: 'tabs:sync',
+            payload: { tabs, activeTabId, tabStyle, accentColor }
+          });
+        } catch (e) {
+          console.warn('[DgodTerm] Failed to post tabs:sync to native host:', e);
+        }
+      }
+    },
+    syncUiSettingsToNative: (settings: any) => {
+      if ((window as any).chrome?.webview) {
+        try {
+          (window as any).chrome.webview.postMessage({
+            type: 'ui-settings:sync',
+            payload: settings
+          });
+        } catch (e) {
+          console.warn('[DgodTerm] Failed to post ui-settings:sync to native host:', e);
+        }
+      }
+    },
+    minimizeWindow: () => {
+      if ((window as any).chrome?.webview) {
+        (window as any).chrome.webview.postMessage({ type: 'window:minimize' });
+      }
+      return Promise.resolve();
+    },
+    maximizeWindow: () => {
+      if ((window as any).chrome?.webview) {
+        (window as any).chrome.webview.postMessage({ type: 'window:maximize' });
+      }
+      return Promise.resolve();
+    },
+    closeWindow: () => {
+      if ((window as any).chrome?.webview) {
+        (window as any).chrome.webview.postMessage({ type: 'window:close' });
+      }
+      return Promise.resolve();
+    },
+    isWindowMaximized: () => Promise.resolve(false),
+    onMaximizedChange: () => () => {},
+
+    // Native Menu Bar & TitleBar Event Subscriptions
+    onTabActivate: (cb: Function) => addListener('tab:activate', cb),
+    onTabClose: (cb: Function) => addListener('tab:close', cb),
+    onTabNew: (cb: Function) => addListener('tab:new', cb),
+    onMenuQuickConnect: (cb: Function) => addListener('menu:quick-connect', cb),
+    onMenuOpenSftp: (cb: Function) => addListener('menu:open-sftp', cb),
+    onMenuOpenAnsible: (cb: Function) => addListener('menu:open-ansible', cb),
+    onMenuOpenAudit: (cb: Function) => addListener('menu:open-audit', cb),
+    onMenuOpenTrust: (cb: Function) => addListener('menu:open-trust', cb),
+    onMenuOpenSettings: (cb: Function) => addListener('menu:open-settings', cb),
+    onMenuLockWorkstation: (cb: Function) => addListener('menu:lock-workstation', cb),
+    onMenuNewTerminal: (cb: Function) => addListener('menu:new-terminal', cb),
+    onMenuNewProfile: (cb: Function) => addListener('menu:new-profile', cb),
+    onMenuCloseTab: (cb: Function) => addListener('menu:close-tab', cb),
+    onMenuToggleSidebar: (cb: Function) => addListener('menu:toggle-sidebar', cb),
+    onMenuClearTerminal: (cb: Function) => addListener('menu:clear-terminal', cb)
   };
 }

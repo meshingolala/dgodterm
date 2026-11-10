@@ -24,6 +24,9 @@ import { getHostSystemResources } from '../domain/system-resources';
 import { invokeFeature } from '../features/registry';
 import { UptimeMonitorService } from '../features/uptime-monitor';
 import { LocalTerminalManager } from '../terminal/local-shell';
+import { X11Manager } from '../ssh/x11-manager';
+import { PuTTYImporter } from '../importers/putty-importer';
+import cp from 'child_process';
 
 // Configure app name and clean userData path to prevent disk cache locks on Windows
 app.name = 'dgodterm';
@@ -67,6 +70,176 @@ function getAppIcon(): string {
   return '';
 }
 
+function setupApplicationMenu(win: BrowserWindow) {
+  const isMac = process.platform === 'darwin';
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              {
+                label: 'Settings...',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => win.webContents.send('menu:open-settings')
+              },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Terminal Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => win.webContents.send('menu:new-terminal')
+        },
+        {
+          label: 'New Connection Profile...',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => win.webContents.send('menu:new-profile')
+        },
+        { type: 'separator' as const },
+        {
+          label: 'Settings & Diagnostics...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => win.webContents.send('menu:open-settings')
+        },
+        {
+          label: 'Lock Workstation',
+          accelerator: 'CmdOrCtrl+L',
+          click: () => win.webContents.send('menu:lock-workstation')
+        },
+        { type: 'separator' as const },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => win.webContents.send('menu:close-tab')
+        },
+        { type: 'separator' as const },
+        isMac ? { role: 'close' as const } : { role: 'quit' as const, label: 'Exit DgodTerm' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const },
+        { type: 'separator' as const },
+        {
+          label: 'Clear Terminal Screen',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => win.webContents.send('menu:clear-terminal')
+        }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Left Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => win.webContents.send('menu:toggle-sidebar')
+        },
+        { type: 'separator' as const },
+        { role: 'reload' as const },
+        { role: 'forceReload' as const },
+        { role: 'toggleDevTools' as const },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const },
+        { role: 'zoomIn' as const },
+        { role: 'zoomOut' as const },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const }
+      ]
+    },
+    {
+      label: 'Settings',
+      submenu: [
+        {
+          label: 'Preferences / Settings...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => win.webContents.send('menu:open-settings')
+        },
+        { type: 'separator' as const },
+        {
+          label: 'Terminal Typography & Themes',
+          click: () => win.webContents.send('menu:open-settings', 'terminal')
+        },
+        {
+          label: 'User Interface & Appearance',
+          click: () => win.webContents.send('menu:open-settings', 'ui')
+        },
+        {
+          label: 'Session Security & Auto-Lockout',
+          click: () => win.webContents.send('menu:open-settings', 'session')
+        },
+        {
+          label: 'Governance & Policy Engine',
+          click: () => win.webContents.send('menu:open-settings', 'policy')
+        },
+        { type: 'separator' as const },
+        {
+          label: 'Lock Workstation (Log Out)',
+          accelerator: 'CmdOrCtrl+Shift+L',
+          click: () => win.webContents.send('menu:lock-workstation')
+        }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' as const },
+        { role: 'zoom' as const },
+        ...(isMac
+          ? [
+              { type: 'separator' as const },
+              { role: 'front' as const },
+              { type: 'separator' as const },
+              { role: 'window' as const }
+            ]
+          : [{ role: 'close' as const }])
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About DgodTerm',
+          click: () => {
+            dialog.showMessageBox(win, {
+              type: 'info',
+              title: 'About DgodTerm',
+              message: 'DgodTerm v2.0.0',
+              detail: 'Enterprise SSH Client & Ansible Fleet Automation Desktop Platform.\nSecurity standard: ISO/IEC 27001 Aligned.'
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 async function createWindow() {
   try {
     console.log('[Main] Initializing database...');
@@ -74,6 +247,7 @@ async function createWindow() {
     console.log('[Main] Database initialized successfully.');
 
     const iconPath = getAppIcon();
+    const isWin = process.platform === 'win32';
     mainWindow = new BrowserWindow({
       width: 1440,
       height: 920,
@@ -81,8 +255,14 @@ async function createWindow() {
       minHeight: 700,
       show: false,
       title: 'DgodTerm — Secure SSH & Ansible Fleet Automation',
-      backgroundColor: '#090d16',
+      backgroundColor: '#202020',
       icon: iconPath || undefined,
+      titleBarStyle: isWin ? 'hidden' : 'default',
+      titleBarOverlay: isWin ? {
+        color: '#1a1a1a',
+        symbolColor: '#ffffff',
+        height: 38
+      } : false,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
         nodeIntegration: false,
@@ -90,6 +270,9 @@ async function createWindow() {
         sandbox: false
       }
     });
+
+    // Setup Native Application Menu Bar (File, Edit, View, Settings, Window, Help)
+    setupApplicationMenu(mainWindow);
 
     // Create System Tray
     if (!tray) {
@@ -608,7 +791,7 @@ function registerIpcHandlers() {
     const verification = audit.verifyAuditIntegrity();
     return {
       exported_at: new Date().toISOString(),
-      generator: 'DgodTerm v1.0.0 (ISO/IEC 27001 Evidence Pack)',
+      generator: 'DgodTerm v2.0.0 (ISO/IEC 27001 Evidence Pack)',
       verification,
       events
     };
@@ -866,6 +1049,46 @@ function registerIpcHandlers() {
     } catch (e: any) {
       return { success: false, reason: e.message };
     }
+  });
+
+  // MobaXterm-style X11 Forwarding & Display Management
+  ipcMain.handle('x11:get-status', async () => {
+    return X11Manager.getInstance().getStatus();
+  });
+
+  ipcMain.handle('x11:launch-server', async (_e, { path: customPath }) => {
+    return X11Manager.getInstance().launchServer(customPath);
+  });
+
+  ipcMain.handle('x11:install-vcxsrv', async () => {
+    return X11Manager.getInstance().installVcXsrv();
+  });
+
+  // MobaXterm-style PuTTY Session Importer
+  ipcMain.handle('putty:get-sessions', async () => {
+    return PuTTYImporter.getSavedSessions();
+  });
+
+  ipcMain.handle('putty:import-sessions', async (_e, { sessions, folderId }) => {
+    const list = sessions || PuTTYImporter.getSavedSessions();
+    const profiles = PuTTYImporter.convertToProfiles(list, folderId);
+    for (const p of profiles) {
+      dbOperations.saveProfile(p);
+    }
+    return { importedCount: profiles.length, profiles };
+  });
+
+  // Native Windows Remote Desktop (RDP) Launcher
+  ipcMain.handle('rdp:launch', async (_e, { hostname, port }) => {
+    const host = hostname || '127.0.0.1';
+    const targetPort = port || 3389;
+    const target = targetPort === 3389 ? host : `${host}:${targetPort}`;
+    const proc = cp.spawn('mstsc.exe', [`/v:${target}`], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    proc.unref();
+    return { launched: true, target };
   });
 
   // Workstation Power & Idle Monitoring

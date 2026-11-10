@@ -7,6 +7,69 @@ import { AuditService } from '../audit/audit-service';
 import { dbOperations } from '../storage/db';
 import { parseOsReleaseOutput } from './os-detector';
 
+export function getSupportedSshAlgorithms(): any {
+  try {
+    const constants = require('ssh2/lib/protocol/constants.js');
+    if (constants && constants.SUPPORTED_KEX && constants.SUPPORTED_CIPHER) {
+      return {
+        kex: constants.SUPPORTED_KEX,
+        cipher: constants.SUPPORTED_CIPHER,
+        serverHostKey: constants.SUPPORTED_SERVER_HOST_KEY,
+        hmac: constants.SUPPORTED_MAC
+      };
+    }
+  } catch (e) {}
+
+  return {
+    kex: [
+      'curve25519-sha256@libssh.org',
+      'curve25519-sha256',
+      'ecdh-sha2-nistp256',
+      'ecdh-sha2-nistp384',
+      'ecdh-sha2-nistp521',
+      'diffie-hellman-group-exchange-sha256',
+      'diffie-hellman-group14-sha256',
+      'diffie-hellman-group15-sha512',
+      'diffie-hellman-group16-sha512',
+      'diffie-hellman-group17-sha512',
+      'diffie-hellman-group18-sha512',
+      'diffie-hellman-group-exchange-sha1',
+      'diffie-hellman-group14-sha1',
+      'diffie-hellman-group1-sha1'
+    ],
+    cipher: [
+      'aes128-gcm@openssh.com',
+      'aes256-gcm@openssh.com',
+      'aes128-ctr',
+      'aes192-ctr',
+      'aes256-ctr',
+      'aes256-cbc',
+      'aes192-cbc',
+      'aes128-cbc',
+      '3des-cbc'
+    ],
+    serverHostKey: [
+      'ssh-ed25519',
+      'ecdsa-sha2-nistp256',
+      'ecdsa-sha2-nistp384',
+      'ecdsa-sha2-nistp521',
+      'rsa-sha2-512',
+      'rsa-sha2-256',
+      'ssh-rsa',
+      'ssh-dss'
+    ],
+    hmac: [
+      'hmac-sha2-256-etm@openssh.com',
+      'hmac-sha2-512-etm@openssh.com',
+      'hmac-sha1-etm@openssh.com',
+      'hmac-sha2-256',
+      'hmac-sha2-512',
+      'hmac-sha1',
+      'hmac-md5'
+    ]
+  };
+}
+
 export interface SSHSessionCallbacks {
   onData: (data: string) => void;
   onClose: (code: number, signal?: string) => void;
@@ -102,6 +165,7 @@ export class SSHManager {
       keepaliveInterval: (profile.ssh_options?.keepalive_interval ?? 30) * 1000,
       readyTimeout: 20000,
       tryKeyboard: true,
+      algorithms: getSupportedSshAlgorithms(),
       hostVerifier: (keyBuffer: Buffer, verifyCallback: (accept: boolean) => void) => {
         const keyType = profile.hostname.includes('ed25519') ? 'ssh-ed25519' : 'ssh-rsa';
         const verifyRes = TrustStore.getInstance().verifyHostKey(
@@ -123,8 +187,8 @@ export class SSHManager {
       }
     };
 
-    if (cred.authType === 'agent' && cred.agentSock) {
-      clientConfig.agent = cred.agentSock;
+    if (cred.authType === 'agent') {
+      clientConfig.agent = cred.agentSock || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : process.env.SSH_AUTH_SOCK);
     } else if (cred.authType === 'privateKey' && cred.privateKey) {
       clientConfig.privateKey = cred.privateKey;
       if (cred.passphrase) {
@@ -139,6 +203,7 @@ export class SSHManager {
       }
     }
 
+    let kbInteractiveTried = false;
     client.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
       if (!prompts || prompts.length === 0) {
         finish([]);
@@ -148,8 +213,10 @@ export class SSHManager {
       if (!transient && profile.id) {
         transient = credBroker.getTransientSecret(`profile:${profile.id}`);
       }
-      if (transient) {
-        finish(prompts.map(() => transient!));
+      const kbPassword = transient || cred.password;
+      if (kbPassword && !kbInteractiveTried) {
+        kbInteractiveTried = true;
+        finish(prompts.map(() => kbPassword));
       } else {
         const s = this.sessions.get(sessionId);
         if (s) {
@@ -159,6 +226,21 @@ export class SSHManager {
         callbacks.onPasswordRequired(promptLabel);
       }
     });
+
+    client.on('banner', (message: string) => {
+      if (message) {
+        callbacks.onData(message.replace(/\r?\n/g, '\r\n') + '\r\n');
+      }
+    });
+
+    let hasClosed = false;
+    const notifyClose = (code?: number, signal?: string) => {
+      if (hasClosed) return;
+      hasClosed = true;
+      const normalizedCode = (typeof code === 'number' && !isNaN(code)) ? code : 0;
+      callbacks.onClose(normalizedCode, signal);
+      this.disconnectSession(sessionId);
+    };
 
     client.on('ready', () => {
       AuditService.getInstance().logEvent({
@@ -176,17 +258,57 @@ export class SSHManager {
 
       dbOperations.updateProfileLastConnected(profile.id);
 
-      // Automatic Linux Distro / Flavour Detection (detects on login and updates host icon)
-      this.detectOsFlavor(client, profile.id, (flavor, name) => {
-        callbacks.onOsFlavorDetected?.(profile.id, flavor, name);
-      });
+      // MobaXterm-style X11 Forwarding support
+      const isX11Requested = Boolean(profile.ssh_options?.x11_forwarding);
+      const shellOpts: any = {
+        term: profile.ssh_options?.terminal_type || 'xterm',
+        cols: cols || 80,
+        rows: rows || 24
+      };
+
+      if (isX11Requested) {
+        shellOpts.x11 = {
+          screen: 0,
+          single: false
+        };
+
+        client.on('x11', (info: any, accept: () => ClientChannel, reject: () => void) => {
+          try {
+            const x11Chan = accept();
+            const net = require('net');
+            const x11Socket = net.connect(6000, '127.0.0.1');
+
+            x11Socket.on('connect', () => {
+              console.log(`[DgodTerm X11 Forwarding] Bridged remote X11 client (${info.originAddr}:${info.originPort}) to local X11 display server :0.0`);
+            });
+
+            x11Socket.on('error', (err: any) => {
+              console.warn('[DgodTerm X11 Forwarding] Failed to bridge to local X11 server on 127.0.0.1:6000. Ensure VcXsrv/Xming is running:', err.message);
+              try { x11Chan.close(); } catch {}
+            });
+
+            x11Chan.on('error', () => {
+              try { x11Socket.destroy(); } catch {}
+            });
+
+            x11Chan.on('close', () => {
+              try { x11Socket.end(); } catch {}
+            });
+
+            x11Socket.on('close', () => {
+              try { x11Chan.close(); } catch {}
+            });
+
+            x11Chan.pipe(x11Socket).pipe(x11Chan);
+          } catch (e: any) {
+            console.error('[DgodTerm X11 Error]', e);
+            try { reject(); } catch {}
+          }
+        });
+      }
 
       client.shell(
-        {
-          term: profile.ssh_options?.terminal_type || 'xterm-256color',
-          cols,
-          rows
-        },
+        shellOpts,
         (err, channel) => {
           if (err) {
             callbacks.onError(err);
@@ -198,13 +320,54 @@ export class SSHManager {
             s.channel = channel;
           }
 
+          let bannerCaptured = false;
+          let bannerBuffer = '';
+
           channel.on('data', (chunk: Buffer) => {
-            callbacks.onData(chunk.toString('utf-8'));
+            const text = chunk.toString('utf-8');
+            callbacks.onData(text);
+
+            if (!bannerCaptured && profile.id) {
+              bannerBuffer += text;
+              if (bannerBuffer.length > 30 || bannerBuffer.includes('\n')) {
+                const lower = bannerBuffer.toLowerCase();
+                let detectedFlavor: string | null = null;
+                let detectedName: string | null = null;
+
+                if (
+                  lower.includes('cisco ios') ||
+                  lower.includes('cisco nexus') ||
+                  lower.includes('ios-xe') ||
+                  lower.includes('cisco systems') ||
+                  lower.includes('cisco ') ||
+                  lower.includes('line vty')
+                ) {
+                  detectedFlavor = 'cisco';
+                  detectedName = lower.includes('nexus') ? 'Cisco NX-OS' : (lower.includes('ios-xe') ? 'Cisco IOS-XE' : 'Cisco IOS');
+                } else if (lower.includes('ubuntu')) {
+                  detectedFlavor = 'ubuntu';
+                  detectedName = 'Ubuntu Linux';
+                } else if (lower.includes('debian')) {
+                  detectedFlavor = 'debian';
+                  detectedName = 'Debian Linux';
+                } else if (lower.includes('oracle linux')) {
+                  detectedFlavor = 'oracle';
+                  detectedName = 'Oracle Linux';
+                }
+
+                if (detectedFlavor && detectedName) {
+                  bannerCaptured = true;
+                  dbOperations.updateProfileOsFlavor(profile.id, detectedFlavor, detectedName);
+                  callbacks.onOsFlavorDetected?.(profile.id, detectedFlavor, detectedName);
+                } else if (bannerBuffer.length > 2000) {
+                  bannerCaptured = true;
+                }
+              }
+            }
           });
 
           channel.on('close', (code: number, signal?: string) => {
-            callbacks.onClose(code, signal);
-            this.disconnectSession(sessionId);
+            notifyClose(code, signal);
           });
         }
       );
@@ -228,8 +391,7 @@ export class SSHManager {
     });
 
     client.on('close', () => {
-      callbacks.onClose(0);
-      this.disconnectSession(sessionId);
+      notifyClose(0);
     });
 
     // Check if Jump Host / Bastion tunneling is configured
@@ -257,6 +419,7 @@ export class SSHManager {
           username: jumpProfile.username,
           readyTimeout: 15000,
           tryKeyboard: true,
+          algorithms: getSupportedSshAlgorithms(),
           hostVerifier: (_k: Buffer, cb: (acc: boolean) => void) => cb(true)
         };
 
@@ -331,7 +494,11 @@ export class SSHManager {
       // Re-trigger connect with the new transient password
       const { profile, cols, rows, callbacks } = s;
       try {
-        if (s.jumpClient) s.jumpClient.end();
+        if (s.jumpClient) {
+          s.jumpClient.removeAllListeners();
+          s.jumpClient.end();
+        }
+        s.client.removeAllListeners();
         s.client.end();
       } catch (e) {}
       this.connectSession(sessionId, profile, cols, rows, callbacks);
@@ -466,11 +633,12 @@ export class SSHManager {
       username: profile.username,
       readyTimeout: 15000,
       tryKeyboard: true,
+      algorithms: getSupportedSshAlgorithms(),
       hostVerifier: (_k: Buffer, cb: (a: boolean) => void) => cb(true)
     };
 
-    if (cred.authType === 'agent' && cred.agentSock) {
-      clientConfig.agent = cred.agentSock;
+    if (cred.authType === 'agent') {
+      clientConfig.agent = cred.agentSock || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : process.env.SSH_AUTH_SOCK);
     } else if (cred.authType === 'privateKey' && cred.privateKey) {
       clientConfig.privateKey = cred.privateKey;
       if (cred.passphrase) clientConfig.passphrase = cred.passphrase;
@@ -550,6 +718,7 @@ export class SSHManager {
             username: jumpProfile.username,
             readyTimeout: 15000,
             tryKeyboard: true,
+            algorithms: getSupportedSshAlgorithms(),
             hostVerifier: (_k: Buffer, cb: (acc: boolean) => void) => cb(true)
           };
 
@@ -605,9 +774,12 @@ export class SSHManager {
   public resize(sessionId: string, cols: number, rows: number): void {
     const s = this.sessions.get(sessionId);
     if (s && s.channel) {
+      if (!cols || !rows || cols < 15 || rows < 2) return;
       s.cols = cols;
       s.rows = rows;
-      s.channel.setWindow(rows, cols, 0, 0);
+      try {
+        s.channel.setWindow(rows, cols, 0, 0);
+      } catch (e) {}
     }
   }
 

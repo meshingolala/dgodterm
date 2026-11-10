@@ -1834,15 +1834,15 @@ export const AnsibleView: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-mono">
-                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 font-semibold">
                       <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                       ok: {liveRecap.ok}
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60 flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1 font-semibold">
                       <RotateCcw className="w-3 h-3 text-amber-400" />
                       chg: {liveRecap.changed}
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-800/60 flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/40 flex items-center gap-1 font-semibold">
                       <XCircle className="w-3 h-3 text-red-400" />
                       failed: {liveRecap.failed}
                     </span>
@@ -1905,14 +1905,14 @@ export const AnsibleView: React.FC = () => {
                 {/* Auto-scroll toggle */}
                 <button
                   onClick={() => setAutoScroll(!autoScroll)}
-                  className={`px-2 py-0.5 rounded text-xs font-medium border transition flex items-center gap-1 ${
+                  className={`px-2 py-0.5 rounded text-xs font-medium border transition flex items-center gap-1 cursor-pointer ${
                     autoScroll
-                      ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300'
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                      ? 'bg-sky-500/20 border-sky-500/50 text-sky-300'
+                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400'
                   }`}
                   title="Toggle automatic scrolling to latest log line"
                 >
-                  <ArrowDown className={`w-3 h-3 ${autoScroll ? 'text-indigo-400' : 'text-slate-500'}`} />
+                  <ArrowDown className={`w-3 h-3 ${autoScroll ? 'text-sky-400' : 'text-slate-500'}`} />
                   Auto-scroll
                 </button>
 

@@ -122,6 +122,13 @@ export class CredentialBroker {
     }
 
     if (ref.kind === 'vault_reference' && ref.reference_id) {
+      const sessionTransient = this.getTransientSecret(sessionId);
+      if (sessionTransient) {
+        return {
+          authType: 'password',
+          password: sessionTransient
+        };
+      }
       const cred = dbOperations.getVaultCredentialById(ref.reference_id, true);
       if (cred && cred.password) {
         return {
@@ -131,11 +138,9 @@ export class CredentialBroker {
       }
     }
 
-    if (ref.kind === 'transient_prompt') {
-      const transient = findSecret();
-      if (transient) {
-        return { authType: 'password', password: transient };
-      }
+    const fallbackTransient = findSecret();
+    if (fallbackTransient) {
+      return { authType: 'password', password: fallbackTransient };
     }
 
     return { authType: 'none' };

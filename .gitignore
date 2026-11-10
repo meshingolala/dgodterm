@@ -5,6 +5,10 @@ node_modules/
 dist/
 release/*
 !release/DgodTerm Setup 1.0.0.exe
+!release/DgodTerm-Setup-2.0.0.exe
+dgodterm-pro/
+src-native/**/bin/
+src-native/**/obj/
 /gs_setup.exe
 *.blockmap
 

@@ -33,9 +33,10 @@ import {
   Sparkles,
   Wrench,
   FileText,
-  ChevronDown
+  ChevronDown,
+  FolderSync
 } from 'lucide-react';
-import { getTerminalSettings, TERMINAL_THEMES, TerminalSettings, getEffectiveThemeBackground } from '../settings/settings-manager';
+import { getTerminalSettings, getGeneralUiSettings, TERMINAL_THEMES, TerminalSettings, getEffectiveThemeBackground } from '../settings/settings-manager';
 import { copyTextToClipboard, readTextFromClipboard } from '../utils/clipboard-utils';
 import { SnippetsModal } from './SnippetsModal';
 import { HealthMonitorWidget } from './HealthMonitorWidget';
@@ -58,6 +59,7 @@ interface TerminalViewProps {
   profile: ConnectionProfile;
   isActive?: boolean;
   onClose: () => void;
+  onOpenSFTP?: (profile: ConnectionProfile) => void;
   onRequestPassword?: (sessionId: string, profile: ConnectionProfile) => void;
   initialCommand?: string;
 }
@@ -67,6 +69,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   profile,
   isActive = true,
   onClose,
+  onOpenSFTP,
   onRequestPassword,
   initialCommand
 }) => {
@@ -75,6 +78,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const initialCommandRanRef = useRef(false);
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
 
   const [connected, setConnected] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -83,8 +88,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Auto-Reconnect & Connection Self-Healing State
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<any>(null);
   const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
+  const userDisconnectedRef = useRef(false);
 
   // Destructive Command Interceptor State
   const [pendingDestructiveAlert, setPendingDestructiveAlert] = useState<{
@@ -256,14 +263,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   }, [showToolsDropdown]);
 
   const [sessionThemeId, setSessionThemeId] = useState<string>(() => {
+    const ui = getGeneralUiSettings();
+    const isLight = ui.themeMode === 'light' || ui.appTheme === 'light';
     try {
       const sessionSaved = localStorage.getItem(`dgodterm:session-theme:${sessionId}`);
-      if (sessionSaved && TERMINAL_THEMES[sessionSaved]) return sessionSaved;
+      if (sessionSaved && TERMINAL_THEMES[sessionSaved]) {
+        if (!isLight || sessionSaved.includes('light')) return sessionSaved;
+      }
       const profileSaved = localStorage.getItem(`dgodterm:profile-theme:${profile.id}`);
-      if (profileSaved && TERMINAL_THEMES[profileSaved]) return profileSaved;
+      if (profileSaved && TERMINAL_THEMES[profileSaved]) {
+        if (!isLight || profileSaved.includes('light')) return profileSaved;
+      }
     } catch (e) {}
     const ts = getTerminalSettings();
-    return ts.themeId && TERMINAL_THEMES[ts.themeId] ? ts.themeId : 'dgod-dark';
+    if (isLight) {
+      return (ts.themeId && ts.themeId.includes('light')) ? ts.themeId : 'gruvbox-light';
+    }
+    return ts.themeId && TERMINAL_THEMES[ts.themeId] ? ts.themeId : 'gruvbox-material';
   });
 
   const [currentThemeBg, setCurrentThemeBg] = useState(() => {
@@ -363,6 +379,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     term.loadAddon(searchAddon);
     term.loadAddon(webLinksAddon);
 
+    if (terminalRef.current) {
+      terminalRef.current.style.setProperty('--dgod-terminal-font', initialSettings.fontFamily);
+    }
+    document.documentElement.style.setProperty('--dgod-terminal-font', initialSettings.fontFamily);
+
     term.open(terminalRef.current);
     fitAddon.fit();
 
@@ -383,6 +404,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       term.writeln(`\x1b[38;5;244mHost Identity Policy: STRICT | Verification: Mandated | Redaction: ACTIVE\x1b[0m\r\n`);
 
       // Connect via backend
+      userDisconnectedRef.current = false;
       (window as any).dgodterm.connectSSH(sessionId, profile.id, term.cols, term.rows);
       setConnected(true);
     }
@@ -456,6 +478,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // Listen to incoming SSH data
     const unsubscribeData = (window as any).dgodterm.onSSHData((targetSessionId: string, chunk: string) => {
       if (targetSessionId === sessionId) {
+        if (reconnectAttemptRef.current > 0) {
+          reconnectAttemptRef.current = 0;
+          setReconnectAttempt(0);
+        }
         term.write(chunk);
         if (recordingStartTimeRef.current !== null) {
           const elapsed = (Date.now() - recordingStartTimeRef.current) / 1000;
@@ -492,39 +518,65 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const unsubscribeClose = (window as any).dgodterm.onSSHClose((targetSessionId: string, code: number) => {
       if (targetSessionId === sessionId) {
         setConnected(false);
+
+        // Cancel any pending reconnect timers
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        setIsAutoReconnecting(false);
+
+        // If the user manually clicked Disconnect or closed the tab, don't show alarm or reconnect
+        if (userDisconnectedRef.current) {
+          term.writeln(`\r\n\x1b[38;5;244m[DgodTerm] Disconnected by user.\x1b[0m\r\n`);
+          reconnectAttemptRef.current = 0;
+          setReconnectAttempt(0);
+          return;
+        }
+
+        // Clean exit (exit code 0: user typed 'exit' or remote device closed normally)
+        if (code === 0) {
+          term.writeln(`\r\n\x1b[38;5;244m[DgodTerm] Session closed (exit code: 0).\x1b[0m\r\n`);
+          reconnectAttemptRef.current = 0;
+          setReconnectAttempt(0);
+          return;
+        }
+
+        // Abnormal exit (network drop, connection refused, timeout, non-zero code)
         term.writeln(`\r\n\x1b[38;5;196m[DgodTerm] Connection lost (exit code: ${code}).\x1b[0m`);
 
         // Trigger native desktop notification on dropped connection
-        if (code !== 0) {
-          try {
-            (window as any).dgodterm?.showNotification?.(
-              'Connection Interrupted',
-              `SSH session to ${profile.display_name} (${profile.hostname}) was closed unexpectedly.`
-            );
-          } catch {}
-        }
+        try {
+          (window as any).dgodterm?.showNotification?.(
+            'Connection Interrupted',
+            `SSH session to ${profile.display_name} (${profile.hostname}) was closed unexpectedly.`
+          );
+        } catch {}
 
-        // If closed abnormally (non-zero or unexpected network reset), attempt auto-reconnect
-        if (code !== 0 && !reconnectTimerRef.current) {
+        // If closed abnormally, attempt auto-reconnect
+        const nextAttempt = reconnectAttemptRef.current + 1;
+        reconnectAttemptRef.current = nextAttempt;
+        setReconnectAttempt(nextAttempt);
+
+        const delaySec = Math.min(30, Math.pow(2, Math.min(nextAttempt, 5)));
+        term.writeln(`\x1b[38;5;214m[DgodTerm Watchdog] Auto-reconnecting in ${delaySec}s (Attempt ${nextAttempt}/5)... Press Reconnect to force.\x1b[0m`);
+
+        if (nextAttempt <= 5) {
           setIsAutoReconnecting(true);
-          const nextAttempt = reconnectAttempt + 1;
-          setReconnectAttempt(nextAttempt);
-
-          const delaySec = Math.min(30, Math.pow(2, Math.min(nextAttempt, 5)));
-          term.writeln(`\x1b[38;5;214m[DgodTerm Watchdog] Auto-reconnecting in ${delaySec}s (Attempt ${nextAttempt}/5)... Press Reconnect to force.\x1b[0m`);
-
-          if (nextAttempt <= 5) {
-            reconnectTimerRef.current = setTimeout(() => {
-              reconnectTimerRef.current = null;
-              term.writeln(`\x1b[38;5;39m[DgodTerm Watchdog]\x1b[0m Retrying connection to ${profile.hostname}...`);
-              (window as any).dgodterm.connectSSH(sessionId, profile.id, term.cols, term.rows);
-              setConnected(true);
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (userDisconnectedRef.current) {
               setIsAutoReconnecting(false);
-            }, delaySec * 1000);
-          } else {
+              return;
+            }
+            term.writeln(`\x1b[38;5;39m[DgodTerm Watchdog]\x1b[0m Retrying connection to ${profile.hostname}...`);
+            (window as any).dgodterm.connectSSH(sessionId, profile.id, term.cols, term.rows);
+            setConnected(true);
             setIsAutoReconnecting(false);
-            term.writeln(`\x1b[38;5;196m[DgodTerm Watchdog] Auto-reconnect limit reached. Click Reconnect manually.\x1b[0m`);
-          }
+          }, delaySec * 1000);
+        } else {
+          setIsAutoReconnecting(false);
+          term.writeln(`\x1b[38;5;196m[DgodTerm Watchdog] Auto-reconnect limit reached. Click Reconnect manually.\x1b[0m`);
         }
       }
     });
@@ -535,16 +587,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
-    // Handle resize
+    // Handle resize (throttled with requestAnimationFrame)
+    let resizeRafId: number | null = null;
     const handleResize = () => {
-      try {
-        fitAddon.fit();
-        if (isLocalShell) {
-          (window as any).dgodterm?.resizeLocalShell?.(sessionId, term.cols, term.rows);
-        } else {
-          (window as any).dgodterm?.resizeSSH?.(sessionId, term.cols, term.rows);
-        }
-      } catch (e) {}
+      if (resizeRafId !== null) return;
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        try {
+          if (!isActiveRef.current || !terminalRef.current) return;
+          if (terminalRef.current.clientWidth <= 50 || terminalRef.current.clientHeight <= 50) return;
+
+          fitAddon.fit();
+          if (term.cols < 15 || term.rows < 2) return;
+
+          if (isLocalShell) {
+            (window as any).dgodterm?.resizeLocalShell?.(sessionId, term.cols, term.rows);
+          } else {
+            (window as any).dgodterm?.resizeSSH?.(sessionId, term.cols, term.rows);
+          }
+        } catch (e) {}
+      });
     };
     window.addEventListener('resize', handleResize);
 
@@ -561,21 +623,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleSettingsUpdated = (e: any) => {
       const updated: TerminalSettings = e.detail;
       if (!term || !fitAddon) return;
+
+      if (updated.fontFamily) {
+        document.documentElement.style.setProperty('--dgod-terminal-font', updated.fontFamily);
+        if (terminalRef.current) {
+          terminalRef.current.style.setProperty('--dgod-terminal-font', updated.fontFamily);
+        }
+        if (secondaryTerminalRef.current) {
+          secondaryTerminalRef.current.style.setProperty('--dgod-terminal-font', updated.fontFamily);
+        }
+      }
+
       term.options.fontFamily = updated.fontFamily;
       term.options.fontSize = updated.fontSize;
       term.options.lineHeight = updated.lineHeight;
       term.options.fontWeight = updated.fontWeight as any;
       term.options.cursorStyle = updated.cursorStyle;
       term.options.cursorBlink = updated.cursorBlink;
-      let targetThemeId = sessionThemeId;
-      try {
-        const hasSpecific = localStorage.getItem(`dgodterm:session-theme:${sessionId}`) ||
-                            localStorage.getItem(`dgodterm:profile-theme:${profile.id}`);
-        if (!hasSpecific) {
-          targetThemeId = updated.themeId;
-          setSessionThemeId(updated.themeId);
-        }
-      } catch (e) {}
+      const targetThemeId = updated.themeId && TERMINAL_THEMES[updated.themeId] ? updated.themeId : sessionThemeId;
+      setSessionThemeId(targetThemeId);
       const themeDef = TERMINAL_THEMES[targetThemeId] || TERMINAL_THEMES['dgod-dark'];
       const effectiveBg = getEffectiveThemeBackground(targetThemeId);
       term.options.theme = {
@@ -586,24 +652,42 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       setCurrentThemeBg(effectiveBg);
       setPaddingPx(updated.windowPadding ?? 8);
       try {
+        fitAddon.fit();
         (term as any).refresh?.(0, term.rows - 1);
       } catch (e) {}
       if (secondaryXtermInstance.current) {
+        secondaryXtermInstance.current.options.fontFamily = updated.fontFamily;
+        secondaryXtermInstance.current.options.fontSize = updated.fontSize;
+        secondaryXtermInstance.current.options.lineHeight = updated.lineHeight;
+        secondaryXtermInstance.current.options.fontWeight = updated.fontWeight as any;
         secondaryXtermInstance.current.options.theme = {
           ...themeDef,
           background: effectiveBg,
           cursor: updated.cursorColor || themeDef.cursor
         };
         try {
+          secondaryFitAddonRef.current?.fit();
           (secondaryXtermInstance.current as any).refresh?.(0, secondaryXtermInstance.current.rows - 1);
         } catch (e) {}
       }
       setTimeout(() => {
-        fitAddon.fit();
-        (window as any).dgodterm.resizeSSH(sessionId, term.cols, term.rows);
+        try {
+          fitAddon.fit();
+          (term as any).refresh?.(0, term.rows - 1);
+          if (isLocalShell) {
+            (window as any).dgodterm?.resizeLocalShell?.(sessionId, term.cols, term.rows);
+          } else {
+            (window as any).dgodterm?.resizeSSH?.(sessionId, term.cols, term.rows);
+          }
+        } catch (e) {}
       }, 50);
     };
     window.addEventListener('dgodterm:terminal-settings-updated', handleSettingsUpdated);
+    const handleUiSettingsUpdated = () => {
+      const ts = getTerminalSettings();
+      handleSettingsUpdated({ detail: ts });
+    };
+    window.addEventListener('dgodterm:ui-settings-updated', handleUiSettingsUpdated);
 
     // Right-click context menu & Direct copy/paste
     const handleContextMenu = async (e: MouseEvent) => {
@@ -692,9 +776,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     terminalEl.addEventListener('wheel', handleTerminalActivity, { passive: true });
 
     return () => {
+      userDisconnectedRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+        resizeRafId = null;
+      }
       window.removeEventListener('resize', handleResize);
       if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener('dgodterm:terminal-settings-updated', handleSettingsUpdated);
+      window.removeEventListener('dgodterm:ui-settings-updated', handleUiSettingsUpdated);
       window.removeEventListener('click', handleGlobalClick);
       terminalEl.removeEventListener('contextmenu', handleContextMenu);
       terminalEl.removeEventListener('paste', handlePaste);
@@ -716,7 +810,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
 
   useEffect(() => {
-    if (isActive && fitAddonRef.current && xtermInstance.current) {
+    isActiveRef.current = isActive;
+    if (isActive && fitAddonRef.current && xtermInstance.current && terminalRef.current) {
       const curSettings = getTerminalSettings();
       const themeDef = TERMINAL_THEMES[sessionThemeId] || TERMINAL_THEMES['dgod-dark'];
       const effectiveBg = getEffectiveThemeBackground(sessionThemeId);
@@ -742,7 +837,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
       const timer = setTimeout(() => {
         try {
-          fitAddonRef.current?.fit();
+          if (terminalRef.current && terminalRef.current.clientWidth > 50 && terminalRef.current.clientHeight > 50) {
+            fitAddonRef.current?.fit();
+            const cols = xtermInstance.current?.cols || 80;
+            const rows = xtermInstance.current?.rows || 24;
+            if (cols >= 15 && rows >= 2) {
+              if (profile.id.startsWith('local-')) {
+                (window as any).dgodterm?.resizeLocalShell?.(sessionId, cols, rows);
+              } else {
+                (window as any).dgodterm?.resizeSSH?.(sessionId, cols, rows);
+              }
+            }
+          }
           xtermInstance.current?.focus();
         } catch (e) {}
       }, 50);
@@ -807,15 +913,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
+    let resizeRafId: number | null = null;
     const handleResize = () => {
-      try {
-        fitAddon.fit();
-        (window as any).dgodterm.resizeSSH(secondarySessionId, secTerm.cols, secTerm.rows);
-      } catch (e) {}
+      if (resizeRafId !== null) return;
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        try {
+          if (!isActiveRef.current || !secondaryTerminalRef.current) return;
+          if (secondaryTerminalRef.current.clientWidth <= 50 || secondaryTerminalRef.current.clientHeight <= 50) return;
+          fitAddon.fit();
+          if (secTerm.cols < 15 || secTerm.rows < 2) return;
+          (window as any).dgodterm.resizeSSH(secondarySessionId, secTerm.cols, secTerm.rows);
+        } catch (e) {}
+      });
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
+      userDisconnectedRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+        resizeRafId = null;
+      }
       window.removeEventListener('resize', handleResize);
       unsubData();
       unsubClose();
@@ -846,6 +969,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handleReconnect = () => {
+    userDisconnectedRef.current = false;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    setIsAutoReconnecting(false);
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
+
     const isLocalShell = profile.id.startsWith('local-');
     if (xtermInstance.current) {
       if (isLocalShell) {
@@ -862,6 +994,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handleDisconnect = () => {
+    userDisconnectedRef.current = true;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    setIsAutoReconnecting(false);
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
+
     const isLocalShell = profile.id.startsWith('local-');
     if (isLocalShell) {
       (window as any).dgodterm?.closeLocalShell?.(sessionId);
@@ -869,6 +1010,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       (window as any).dgodterm.disconnectSSH(sessionId);
     }
     setConnected(false);
+    if (xtermInstance.current) {
+      xtermInstance.current.writeln(`\r\n\x1b[38;5;244m[DgodTerm] Disconnected by user.\x1b[0m\r\n`);
+    }
   };
 
   const handlePasswordSubmit = async (pass: string) => {
@@ -964,6 +1108,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             </div>
           )}
 
+          {/* MobaXterm X11 Forwarding Active Pill */}
+          {profile.ssh_options?.x11_forwarding && (
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/50 text-purple-200 text-[10px] font-mono font-bold tracking-wide shadow-sm"
+              title="MobaXterm X11 Mode: Remote graphical Linux applications forward to display 127.0.0.1:0.0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+              <span>X11 ACTIVE (:0.0)</span>
+            </div>
+          )}
+
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-slate-800 border border-slate-700">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -990,16 +1145,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 : 'DISCONNECTED'}
             </span>
           </div>
-
-          <div className="flex items-center gap-1 text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Strict Identity Verified</span>
-          </div>
-
-          <div className="flex items-center gap-1 text-slate-400">
-            <Activity className="w-3.5 h-3.5 text-sky-400" />
-            <span>Heartbeat: {profile.ssh_options?.keepalive_interval ?? 15}s</span>
-          </div>
         </div>
 
         {/* Toolbar Controls */}
@@ -1014,12 +1159,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 setShowPasswordModal(true);
               }
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/40 text-sky-200 text-xs font-semibold shadow-sm transition"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold shadow-sm transition cursor-pointer"
             title="Authenticate / Enter Password"
           >
-            <KeyRound className="w-3.5 h-3.5 text-sky-300" />
+            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
             <span>Enter Password</span>
           </button>
+
+          {/* Direct SFTP File Browser Button (for remote SSH sessions) */}
+          {!profile.id.startsWith('local-') && onOpenSFTP && (
+            <button
+              onClick={() => onOpenSFTP(profile)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-sm transition cursor-pointer group"
+              title={`Open direct SFTP File Browser for ${profile.display_name} (${profile.username}@${profile.hostname}) in another tab`}
+            >
+              <FolderSync className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>SFTP Browser</span>
+            </button>
+          )}
 
           {/* Active Recording Pill Indicator */}
           {isRecording && (
@@ -1064,6 +1221,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   <span>Diagnostics & System</span>
                   <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">LIVE</span>
                 </div>
+
+                {!profile.id.startsWith('local-') && onOpenSFTP && (
+                  <button
+                    onClick={() => {
+                      onOpenSFTP(profile);
+                      setShowToolsDropdown(false);
+                    }}
+                    className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-slate-800 hover:text-emerald-300 transition cursor-pointer text-emerald-400 font-semibold"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FolderSync className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Dual-Pane SFTP Manager</span>
+                    </div>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono">TAB</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -1477,6 +1650,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Reconnect</span>
             </button>
+
+            {/* Open SFTP File Browser */}
+            {!profile.id.startsWith('local-') && onOpenSFTP && (
+              <button
+                onClick={() => {
+                  setTerminalContextMenu(null);
+                  onOpenSFTP(profile);
+                }}
+                className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-800 hover:text-emerald-300 transition text-emerald-400 cursor-pointer"
+              >
+                <FolderSync className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Open SFTP File Browser</span>
+              </button>
+            )}
 
             {/* Enter Password */}
             <button

@@ -1,12 +1,15 @@
 {
   "name": "dgodterm",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Secure SSH and Ansible Automation Desktop Client",
   "main": "dist/main/main.js",
   "scripts": {
     "build:renderer": "vite build",
     "build:main": "node scripts/generate-icon.js && tsc --project tsconfig.main.json",
     "build": "npm run build:renderer && npm run build:main",
+    "build:native": "dotnet build src-native/DgodTerm.Windows/DgodTerm.Windows.csproj -c Release",
+    "package:native": "node scripts/package-native.js",
+    "build:installer": "node scripts/build-installer.js",
     "start": "electron .",
     "dist": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder",

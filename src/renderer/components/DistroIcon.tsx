@@ -334,7 +334,46 @@ export const DistroIcon: React.FC<DistroIconProps> = ({
     );
   }
 
-  // 17. Generic Linux / Tux Penguin
+  // 17. Cisco IOS / Network Switch / Router
+  if (norm === 'cisco' || norm === 'ios' || norm === 'switch' || norm === 'router') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className={`shrink-0 ${className}`}
+        fill="none"
+        title="Cisco IOS / Network Switch"
+      >
+        <circle cx="12" cy="12" r="10" fill="#049FD9" />
+        <rect x="5.5" y="11" width="1.8" height="5" rx="0.9" fill="#FFFFFF" />
+        <rect x="8.5" y="8" width="1.8" height="8" rx="0.9" fill="#FFFFFF" />
+        <rect x="11.1" y="6" width="1.8" height="10" rx="0.9" fill="#FFFFFF" />
+        <rect x="13.7" y="8" width="1.8" height="8" rx="0.9" fill="#FFFFFF" />
+        <rect x="16.7" y="11" width="1.8" height="5" rx="0.9" fill="#FFFFFF" />
+      </svg>
+    );
+  }
+
+  // 18. Bash / Unix Terminal (MobaXterm style GNU shell)
+  if (norm === 'bash' || norm === 'unix' || norm === 'git-bash' || norm === 'cygwin') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className={`shrink-0 ${className}`}
+        fill="none"
+        title="Unix Bash Terminal"
+      >
+        <rect x="2" y="3" width="20" height="18" rx="4" fill="#0F172A" stroke="#38BDF8" strokeWidth="1.5" />
+        <path d="M6 8L10 12L6 16" stroke="#4ADE80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <line x1="12" y1="16" x2="18" y2="16" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // 19. Generic Linux / Tux Penguin
   if (norm === 'linux') {
     return (
       <svg

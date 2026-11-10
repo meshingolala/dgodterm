@@ -16,7 +16,8 @@ import {
   EyeOff,
   Sparkles,
   Network,
-  FileText
+  FileText,
+  Terminal
 } from 'lucide-react';
 import { CustomSelect, CustomSelectOption } from './CustomSelect';
 import { SSHKeyGeneratorModal } from './SSHKeyGeneratorModal';
@@ -82,7 +83,7 @@ const OS_OPTIONS: CustomSelectOption<string>[] = [
 interface ProfileEditModalProps {
   initialProfile?: ConnectionProfile | null;
   folders: Folder[];
-  onSave: (profile: ConnectionProfile) => void;
+  onSave: (profile: ConnectionProfile, andConnect?: boolean) => void;
   onCancel: () => void;
 }
 
@@ -200,16 +201,15 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildProfile = (): ConnectionProfile | null => {
     if (!displayName.trim() || !hostname.trim() || !username.trim()) {
       setErrorMsg('Display Name, Hostname, and Username are required.');
-      return;
+      return null;
     }
 
     if (authKind === 'vault_reference' && !selectedVaultId) {
       setErrorMsg('Please select a saved credential from the Password Vault or create one.');
-      return;
+      return null;
     }
 
     const tags = tagInput
@@ -235,7 +235,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       last_used_at: initialProfile?.auth_reference?.last_used_at || null
     };
 
-    const updatedProfile: ConnectionProfile = {
+    return {
       id: initialProfile?.id || uuidv4(),
       schema_version: 1,
       display_name: displayName.trim(),
@@ -262,8 +262,13 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       os_flavor: osFlavor.trim() || null,
       os_name: osName.trim() || (osFlavor ? (OS_OPTIONS.find((o) => o.value === osFlavor)?.label.replace(/ \(.*\)/, '') || osFlavor) : null)
     };
+  };
 
-    onSave(updatedProfile);
+  const handleSubmit = (e?: React.FormEvent, andConnect = false) => {
+    if (e) e.preventDefault();
+    const profile = buildProfile();
+    if (!profile) return;
+    onSave(profile, andConnect);
   };
 
   return (
@@ -639,14 +644,22 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <span className="text-slate-300">Allow Agent Forwarding (Disabled by default per policy)</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-start gap-2.5 cursor-pointer p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 hover:border-sky-500/40 transition">
                 <input
                   type="checkbox"
                   checked={x11Forwarding}
                   onChange={(e) => setX11Forwarding(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-700 text-sky-500"
+                  className="rounded bg-slate-900 border-slate-700 text-sky-500 mt-0.5 cursor-pointer"
                 />
-                <span className="text-slate-300">Allow X11 Forwarding (Disabled by default per policy)</span>
+                <div className="flex-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-200">Enable X11 GUI Forwarding (ssh -X)</span>
+                    <span className="text-[10px] bg-purple-500/20 text-purple-300 font-mono px-1.5 py-0.5 rounded border border-purple-500/30 font-bold">MobaXterm Mode</span>
+                  </div>
+                  <span className="text-slate-400 block mt-0.5 text-[11px] leading-relaxed">
+                    Automatically forward remote Linux graphical windows (e.g., xeyes, gedit, virt-manager, wireshark) directly to your Windows desktop via display :0.0.
+                  </span>
+                </div>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer pt-1">
@@ -662,19 +675,27 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
           </div>
 
           {/* Modal Actions */}
-          <div className="pt-2 flex justify-end gap-3 border-t border-slate-800">
+          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-800">
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold shadow-sm"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold shadow-sm transition cursor-pointer"
             >
               {isEditing ? 'Save Changes' : 'Create Profile'}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e, true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold shadow-sm transition cursor-pointer"
+            >
+              <Terminal className="w-4 h-4" />
+              <span>{isEditing ? 'Save & Connect' : 'Create Profile & Connect'}</span>
             </button>
           </div>
         </form>

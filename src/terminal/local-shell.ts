@@ -1,5 +1,7 @@
 import cp, { ChildProcessWithoutNullStreams } from 'child_process';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 
 let ptyModule: typeof import('node-pty') | null = null;
 try {
@@ -24,6 +26,7 @@ interface ActiveLocalSession {
 export class LocalTerminalManager {
   private static instance: LocalTerminalManager;
   private sessions: Map<string, ActiveLocalSession> = new Map();
+  private cachedShells: LocalShellDescriptor[] | null = null;
 
   private constructor() {}
 
@@ -35,22 +38,39 @@ export class LocalTerminalManager {
   }
 
   public getAvailableShells(): LocalShellDescriptor[] {
+    if (this.cachedShells) {
+      return this.cachedShells;
+    }
+
     const isWin = process.platform === 'win32';
     if (!isWin) {
-      return [
+      this.cachedShells = [
         { id: 'bash', name: 'Bash Shell', command: '/bin/bash', args: ['-i'] },
         { id: 'sh', name: 'Standard Shell', command: '/bin/sh', args: ['-i'] }
       ];
+      return this.cachedShells;
     }
 
     const shells: LocalShellDescriptor[] = [];
 
     // Check if PowerShell 7 (pwsh) is present
     let pwshAvailable = false;
-    try {
-      const check = cp.spawnSync('where.exe', ['pwsh'], { encoding: 'utf8' });
-      pwshAvailable = check.status === 0;
-    } catch {}
+    const pwshCandidates = [
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      'C:\\Program Files (x86)\\PowerShell\\7\\pwsh.exe'
+    ];
+    for (const p of pwshCandidates) {
+      if (fs.existsSync(p)) {
+        pwshAvailable = true;
+        break;
+      }
+    }
+    if (!pwshAvailable) {
+      try {
+        const check = cp.spawnSync('where.exe', ['pwsh'], { encoding: 'utf8', timeout: 1000 });
+        pwshAvailable = check.status === 0;
+      } catch {}
+    }
 
     // 1. PowerShell (Prefer pwsh.exe if installed, fallback to powershell.exe)
     shells.push({
@@ -76,6 +96,42 @@ export class LocalTerminalManager {
       args: ['--cd', '~']
     });
 
+    // 4. MobaXterm-style Local Unix Terminal (Bash & GNU Coreutils)
+    const bashCandidates = [
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+      'C:\\msys64\\usr\\bin\\bash.exe',
+      'C:\\cygwin64\\bin\\bash.exe',
+      'C:\\cygwin\\bin\\bash.exe'
+    ];
+    let detectedBash: string | null = null;
+    for (const p of bashCandidates) {
+      if (fs.existsSync(p)) {
+        detectedBash = p;
+        break;
+      }
+    }
+    if (!detectedBash) {
+      try {
+        const check = cp.spawnSync('where.exe', ['bash'], { encoding: 'utf8', timeout: 1000 });
+        if (check.status === 0 && check.stdout) {
+          const lines = check.stdout.trim().split(/\r?\n/);
+          const valid = lines.find((l) => !l.includes('WindowsApps') && fs.existsSync(l));
+          if (valid) detectedBash = valid;
+        }
+      } catch {}
+    }
+
+    if (detectedBash) {
+      shells.push({
+        id: 'bash',
+        name: 'Local Unix (Bash & GNU Coreutils)',
+        command: detectedBash,
+        args: ['--login', '-i']
+      });
+    }
+
+    this.cachedShells = shells;
     return shells;
   }
 
@@ -93,6 +149,19 @@ export class LocalTerminalManager {
     const safeCols = Math.max(10, cols || 80);
     const safeRows = Math.max(5, rows || 24);
 
+    const spawnEnv: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor'
+    };
+
+    if (targetShell.id === 'bash' && targetShell.command.includes('Git')) {
+      const gitUsrBin = path.join(path.dirname(path.dirname(targetShell.command)), 'usr', 'bin');
+      if (fs.existsSync(gitUsrBin)) {
+        spawnEnv.PATH = `${gitUsrBin};${spawnEnv.PATH || ''}`;
+      }
+    }
+
     // 1. Primary: Use node-pty (ConPTY on Windows) for native terminal emulation
     if (ptyModule) {
       try {
@@ -101,11 +170,7 @@ export class LocalTerminalManager {
           cols: safeCols,
           rows: safeRows,
           cwd: os.homedir(),
-          env: {
-            ...process.env,
-            TERM: 'xterm-256color',
-            COLORTERM: 'truecolor'
-          },
+          env: spawnEnv,
           useConpty: true
         });
 
@@ -169,7 +234,7 @@ export class LocalTerminalManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    if (session.ptyProcess && cols > 0 && rows > 0) {
+    if (session.ptyProcess && cols >= 15 && rows >= 2) {
       try {
         session.ptyProcess.resize(cols, rows);
       } catch (err) {

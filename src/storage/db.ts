@@ -250,12 +250,18 @@ export async function initializeDatabase(): Promise<Database> {
 
   runMigrations(db);
   seedInitialData(db);
-  saveDatabase();
+  flushDatabaseSync();
 
   return db;
 }
 
-function saveDatabase(): void {
+let saveDbTimer: NodeJS.Timeout | null = null;
+
+export function flushDatabaseSync(): void {
+  if (saveDbTimer) {
+    clearTimeout(saveDbTimer);
+    saveDbTimer = null;
+  }
   if (!db || !dbFilePath) return;
   try {
     const data = Buffer.from(db.export());
@@ -273,6 +279,19 @@ function saveDatabase(): void {
     console.error('Failed to persist database file:', err);
   }
 }
+
+function saveDatabase(): void {
+  if (!db || !dbFilePath) return;
+  if (saveDbTimer) return;
+  saveDbTimer = setTimeout(() => {
+    saveDbTimer = null;
+    flushDatabaseSync();
+  }, 120);
+}
+
+process.on('exit', () => {
+  flushDatabaseSync();
+});
 
 function runMigrations(database: Database): void {
   database.run(`
@@ -490,59 +509,7 @@ function runMigrations(database: Database): void {
 }
 
 function seedInitialData(database: Database): void {
-  // Check if folders already exist
-  const res = database.exec('SELECT COUNT(*) FROM folders');
-  const count = (res[0]?.values[0]?.[0] as number) || 0;
-
-  if (count === 0) {
-    const f1 = 'f0000000-0000-0000-0000-000000000001';
-    const f2 = 'f0000000-0000-0000-0000-000000000002';
-    const now = new Date().toISOString();
-
-    database.run(
-      `INSERT INTO folders (id, name, parent_id, color, created_at) VALUES
-       (?, 'Production Fleet', NULL, '#ef4444', ?),
-       (?, 'Staging & Dev', NULL, '#3b82f6', ?);`,
-      [f1, now, f2, now]
-    );
-
-    database.run(
-      `INSERT INTO profiles (
-        id, schema_version, display_name, hostname, port, username, folder_id,
-        tags, jump_host_profile_id, auth_reference, host_trust_policy_id,
-        ssh_options, is_favorite, last_connected_at, created_at, updated_at, created_by
-      ) VALUES
-      (
-        'p0000000-0000-0000-0000-000000000001', 1, 'Local Test Linux VM', '127.0.0.1', 2222, 'operator',
-        ?, '["test", "local", "vm"]', NULL,
-        '{"kind":"ssh_agent","reference_id":"agent-default","account_or_key_label":"Local SSH Agent"}',
-        NULL, '{"keepalive_interval":30,"agent_forwarding":false,"x11_forwarding":false,"terminal_type":"xterm-256color"}',
-        1, NULL, ?, ?, 'admin'
-      ),
-      (
-        'p0000000-0000-0000-0000-000000000002', 1, 'Prod Bastion Gateway 01', 'bastion.prod.internal', 22, 'sysadmin',
-        ?, '["prod", "bastion", "pci"]', NULL,
-        '{"kind":"key_file_reference","reference_id":"id_ed25519_prod","account_or_key_label":"Hardware Security Key"}',
-        NULL, '{"keepalive_interval":15,"agent_forwarding":false,"x11_forwarding":false,"terminal_type":"xterm-256color"}',
-        0, NULL, ?, ?, 'admin'
-      );`,
-      [f2, now, now, f1, now, now]
-    );
-
-    // Initial Host Trust Record
-    database.run(
-      `INSERT INTO host_trust (
-        id, hostname_pattern, port, key_or_ca_fingerprint, key_type, raw_public_key,
-        source, verified_by, verified_at, expires_at, status, reason
-      ) VALUES
-      (
-        'ht000000-0000-0000-0000-000000000001', 'bastion.prod.internal', 22,
-        'SHA256:vT4+8PqF5r3xLzW+e1kY9j6Q3A5s7D2f8G1h0J9k2Lm', 'ssh-ed25519',
-        'AAAAC3NzaC1lZDI1NTE5AAAAIG...', 'organization_ca', 'Security Team', ?, NULL, 'active', 'Initial fleet trust enrollment'
-      );`,
-      [now]
-    );
-  }
+  // Fresh installations start with an empty session list (no pre-seeded folders or SSH profiles).
 
   // Seed default playbooks if none exist
   const pbRes = database.exec('SELECT COUNT(*) FROM playbooks');

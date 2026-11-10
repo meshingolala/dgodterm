@@ -2,8 +2,24 @@
 @import "@xterm/xterm/css/xterm.css";
 
 :root {
-  --dgod-app-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --dgod-app-font: 'Google Sans', 'Plus Jakarta Sans', 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, sans-serif;
+  --dgod-terminal-font: 'Consolas', monospace;
   --dgod-base-font-size: 13px;
+  --dgod-bg-app: #2D2F30;
+  --dgod-bg-sidebar: #242627;
+  --dgod-bg-surface: #343638;
+  --dgod-bg-surface-elevated: #3D4042;
+  --dgod-text-primary: #D4BE98;
+  --dgod-text-secondary: #A89984;
+  --dgod-text-muted: #7C6F64;
+  --dgod-border: rgba(212, 190, 152, 0.16);
+  --dgod-border-subtle: rgba(212, 190, 152, 0.09);
+  --dgod-border-strong: rgba(212, 190, 152, 0.24);
+  --dgod-accent: #E78A4E;
+  --dgod-accent-hover: #F29B63;
+  --dgod-accent-rgb: 231, 138, 78;
+  --dgod-accent-muted: rgba(231, 138, 78, 0.16);
+  --dgod-accent-border: rgba(231, 138, 78, 0.40);
   color-scheme: dark;
   text-rendering: optimizeLegibility;
 }
@@ -15,9 +31,14 @@ body, button, input, textarea, select, table, th, td, span, div, p, label, a, h1
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Preserve dedicated monospace for terminal, code, tokens & asciicast playback */
-code, kbd, samp, pre, .font-mono, .xterm, .xterm * {
-  font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace !important;
+/* Dynamic terminal monospace controlled by settings */
+.xterm, .xterm * {
+  font-family: var(--dgod-terminal-font, 'Consolas', monospace) !important;
+  font-feature-settings: "liga" on, "calt" on;
+}
+
+code, kbd, samp, pre, .font-mono {
+  font-family: var(--dgod-terminal-font, 'Consolas', monospace);
   font-feature-settings: "liga" on, "calt" on;
 }
 
@@ -147,99 +168,835 @@ select option {
 }
 
 /* ======================================================== */
-/* THEME MODE: MIDNIGHT DARK vs DARK-GRAY SLATE             */
+/* ANTIGRAVITY DYNAMIC THEME & DESIGN ENGINE                */
 /* ======================================================== */
 
-/* 1. Default Midnight Obsidian (Dark Mode) */
-.theme-dark {
-  --dgod-bg-app: #090d16;
-  --dgod-bg-sidebar: #020617;
-  --dgod-bg-surface: #0f172a;
-  --dgod-bg-surface-elevated: #1e293b;
-  --dgod-border: #1e293b;
-  --dgod-border-subtle: rgba(255, 255, 255, 0.08);
-  --dgod-text-primary: #f8fafc;
-  --dgod-text-secondary: #94a3b8;
-  --dgod-text-muted: #64748b;
+/* Thin Studio Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar:hover {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--dgod-border-strong, rgba(212, 190, 152, 0.24));
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dgod-text-muted, rgba(212, 190, 152, 0.4));
 }
 
-/* 2. Dark-Gray / Soft Zinc Slate (Glare-Free Light Mode) */
-.theme-light {
-  --dgod-bg-app: #18181b;
-  --dgod-bg-sidebar: #202024;
-  --dgod-bg-surface: #27272a;
-  --dgod-bg-surface-elevated: #3f3f46;
-  --dgod-border: #3f3f46;
-  --dgod-border-subtle: rgba(255, 255, 255, 0.12);
-  --dgod-text-primary: #fafafa;
-  --dgod-text-secondary: #d4d4d8;
-  --dgod-text-muted: #a1a1aa;
+/* Dynamic Surface, Text, Border & Accent Overrides across all Themes */
+.theme-dark .bg-\[\#090d16\],
+.theme-windows11 .bg-\[\#090d16\],
+.theme-light .bg-\[\#090d16\],
+.theme-dark .bg-\[\#202020\],
+.theme-windows11 .bg-\[\#202020\],
+.theme-light .bg-\[\#202020\],
+.theme-dark .bg-\[\#18181b\],
+.theme-windows11 .bg-\[\#18181b\],
+.theme-light .bg-\[\#18181b\] {
+  background-color: var(--dgod-bg-app) !important;
 }
 
-/* Scrollbar styling for Dark Gray / Slate */
-.theme-light ::-webkit-scrollbar-track {
-  background: #202024;
-}
-.theme-light ::-webkit-scrollbar-thumb {
-  background: #52525b;
-}
-.theme-light ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
-}
-
-/* Native select background in Dark Gray theme */
-.theme-light select option {
-  background-color: #27272a !important;
-  color: #f4f4f5 !important;
-}
-
-/* Dark Gray palette overrides on slate utility classes */
-.theme-light .bg-\[\#090d16\] {
-  background-color: #18181b !important;
-}
-.theme-light .bg-slate-950 {
-  background-color: #202024 !important;
-}
+.theme-dark .bg-\[\#131316\],
+.theme-windows11 .bg-\[\#131316\],
+.theme-light .bg-\[\#131316\],
+.theme-dark .bg-slate-950,
+.theme-windows11 .bg-slate-950,
+.theme-light .bg-slate-950,
+.theme-dark .bg-slate-950\/90,
+.theme-dark .bg-slate-950\/80,
+.theme-dark .bg-slate-950\/70,
+.theme-dark .bg-slate-950\/60,
+.theme-dark .bg-slate-950\/50,
+.theme-dark .bg-slate-950\/40,
+.theme-dark .bg-slate-950\/30,
+.theme-dark .bg-slate-950\/20,
+.theme-windows11 .bg-slate-950\/90,
+.theme-windows11 .bg-slate-950\/80,
+.theme-windows11 .bg-slate-950\/70,
+.theme-windows11 .bg-slate-950\/60,
+.theme-windows11 .bg-slate-950\/50,
+.theme-windows11 .bg-slate-950\/40,
+.theme-windows11 .bg-slate-950\/30,
+.theme-windows11 .bg-slate-950\/20,
 .theme-light .bg-slate-950\/90,
 .theme-light .bg-slate-950\/80,
+.theme-light .bg-slate-950\/70,
 .theme-light .bg-slate-950\/60,
-.theme-light .bg-slate-950\/40 {
-  background-color: rgba(32, 32, 36, 0.95) !important;
+.theme-light .bg-slate-950\/50,
+.theme-light .bg-slate-950\/40,
+.theme-light .bg-slate-950\/30,
+.theme-light .bg-slate-950\/20 {
+  background-color: var(--dgod-bg-sidebar) !important;
 }
-.theme-light .bg-slate-900 {
-  background-color: #27272a !important;
-}
+
+.theme-dark .bg-\[\#1e1e22\],
+.theme-windows11 .bg-\[\#1e1e22\],
+.theme-light .bg-\[\#1e1e22\],
+.theme-dark .bg-\[\#1c1c20\],
+.theme-windows11 .bg-\[\#1c1c20\],
+.theme-light .bg-\[\#1c1c20\],
+.theme-dark .bg-\[\#1c1c1f\],
+.theme-windows11 .bg-\[\#1c1c1f\],
+.theme-light .bg-\[\#1c1c1f\],
+.theme-dark .bg-\[\#1e1e1e\],
+.theme-windows11 .bg-\[\#1e1e1e\],
+.theme-light .bg-\[\#1e1e1e\],
+.theme-dark .bg-\[\#242424\],
+.theme-windows11 .bg-\[\#242424\],
+.theme-light .bg-\[\#242424\],
+.theme-dark .bg-\[\#2a2a2a\],
+.theme-windows11 .bg-\[\#2a2a2a\],
+.theme-light .bg-\[\#2a2a2a\],
+.theme-dark .bg-\[\#282828\],
+.theme-windows11 .bg-\[\#282828\],
+.theme-light .bg-\[\#282828\],
+.theme-dark .bg-\[\#242429\],
+.theme-windows11 .bg-\[\#242429\],
+.theme-light .bg-\[\#242429\],
+.theme-dark .bg-slate-900,
+.theme-windows11 .bg-slate-900,
+.theme-light .bg-slate-900,
+.theme-dark .bg-slate-900\/98,
+.theme-dark .bg-slate-900\/95,
+.theme-dark .bg-slate-900\/90,
+.theme-dark .bg-slate-900\/80,
+.theme-dark .bg-slate-900\/70,
+.theme-dark .bg-slate-900\/60,
+.theme-dark .bg-slate-900\/50,
+.theme-dark .bg-slate-900\/40,
+.theme-dark .bg-slate-900\/30,
+.theme-dark .bg-slate-900\/20,
+.theme-windows11 .bg-slate-900\/98,
+.theme-windows11 .bg-slate-900\/95,
+.theme-windows11 .bg-slate-900\/90,
+.theme-windows11 .bg-slate-900\/80,
+.theme-windows11 .bg-slate-900\/70,
+.theme-windows11 .bg-slate-900\/60,
+.theme-windows11 .bg-slate-900\/50,
+.theme-windows11 .bg-slate-900\/40,
+.theme-windows11 .bg-slate-900\/30,
+.theme-windows11 .bg-slate-900\/20,
+.theme-light .bg-slate-900\/98,
+.theme-light .bg-slate-900\/95,
+.theme-light .bg-slate-900\/90,
 .theme-light .bg-slate-900\/80,
+.theme-light .bg-slate-900\/70,
 .theme-light .bg-slate-900\/60,
 .theme-light .bg-slate-900\/50,
-.theme-light .bg-slate-900\/40 {
-  background-color: rgba(39, 39, 42, 0.9) !important;
+.theme-light .bg-slate-900\/40,
+.theme-light .bg-slate-900\/30,
+.theme-light .bg-slate-900\/20 {
+  background-color: var(--dgod-bg-surface) !important;
 }
-.theme-light .bg-slate-800 {
-  background-color: #3f3f46 !important;
+
+.theme-dark .bg-\[\#141417\],
+.theme-windows11 .bg-\[\#141417\],
+.theme-light .bg-\[\#141417\],
+.theme-dark .bg-\[\#323238\],
+.theme-windows11 .bg-\[\#323238\],
+.theme-light .bg-\[\#323238\],
+.theme-dark .hover\:bg-\[\#323238\]:hover,
+.theme-windows11 .hover\:bg-\[\#323238\]:hover,
+.theme-light .hover\:bg-\[\#323238\]:hover,
+.theme-dark .bg-slate-800,
+.theme-dark .bg-slate-800\/90,
+.theme-dark .bg-slate-800\/80,
+.theme-dark .bg-slate-800\/70,
+.theme-dark .bg-slate-800\/60,
+.theme-dark .bg-slate-800\/50,
+.theme-dark .bg-slate-800\/40,
+.theme-dark .bg-slate-800\/30,
+.theme-dark .bg-slate-800\/20,
+.theme-windows11 .bg-slate-800,
+.theme-windows11 .bg-slate-800\/90,
+.theme-windows11 .bg-slate-800\/80,
+.theme-windows11 .bg-slate-800\/70,
+.theme-windows11 .bg-slate-800\/60,
+.theme-windows11 .bg-slate-800\/50,
+.theme-windows11 .bg-slate-800\/40,
+.theme-windows11 .bg-slate-800\/30,
+.theme-windows11 .bg-slate-800\/20,
+.theme-light .bg-slate-800,
+.theme-light .bg-slate-800\/90,
+.theme-light .bg-slate-800\/80,
+.theme-light .bg-slate-800\/70,
+.theme-light .bg-slate-800\/60,
+.theme-light .bg-slate-800\/50,
+.theme-light .bg-slate-800\/40,
+.theme-light .bg-slate-800\/30,
+.theme-light .bg-slate-800\/20,
+.theme-dark .bg-slate-850,
+.theme-windows11 .bg-slate-850,
+.theme-light .bg-slate-850,
+.theme-dark .bg-\[\#2c2c33\],
+.theme-windows11 .bg-\[\#2c2c33\],
+.theme-light .bg-\[\#2c2c33\],
+.theme-dark .bg-\[\#27272c\],
+.theme-windows11 .bg-\[\#27272c\],
+.theme-light .bg-\[\#27272c\],
+.theme-dark .hover\:bg-\[\#27272c\]:hover,
+.theme-windows11 .hover\:bg-\[\#27272c\]:hover,
+.theme-light .hover\:bg-\[\#27272c\]:hover {
+  background-color: var(--dgod-bg-surface-elevated) !important;
 }
+
+.theme-dark .bg-\[\#0078d4\],
+.theme-windows11 .bg-\[\#0078d4\],
+.theme-light .bg-\[\#0078d4\],
+.theme-dark .hover\:bg-\[\#1084df\]:hover,
+.theme-windows11 .hover\:bg-\[\#1084df\]:hover,
+.theme-light .hover\:bg-\[\#1084df\]:hover {
+  background-color: var(--dgod-accent) !important;
+  color: #ffffff !important;
+}
+
+.theme-dark .bg-\[\#0078d4\] *,
+.theme-windows11 .bg-\[\#0078d4\] *,
+.theme-light .bg-\[\#0078d4\] * {
+  color: #ffffff !important;
+}
+
+.theme-dark .border-slate-800,
+.theme-dark .border-slate-800\/90,
+.theme-dark .border-slate-800\/80,
+.theme-dark .border-slate-800\/60,
+.theme-dark .border-slate-800\/40,
+.theme-windows11 .border-slate-800,
+.theme-windows11 .border-slate-800\/90,
+.theme-windows11 .border-slate-800\/80,
+.theme-windows11 .border-slate-800\/60,
+.theme-windows11 .border-slate-800\/40,
 .theme-light .border-slate-800,
+.theme-light .border-slate-800\/90,
 .theme-light .border-slate-800\/80,
 .theme-light .border-slate-800\/60,
-.theme-light .border-slate-800\/40 {
-  border-color: #3f3f46 !important;
+.theme-light .border-slate-800\/40,
+.theme-dark .border-\[\#242429\],
+.theme-windows11 .border-\[\#242429\],
+.theme-light .border-\[\#242429\],
+.theme-dark .border-\[\#2a2a30\],
+.theme-windows11 .border-\[\#2a2a30\],
+.theme-light .border-\[\#2a2a30\],
+.theme-dark .border-white\/\[0\.06\],
+.theme-windows11 .border-white\/\[0\.06\],
+.theme-light .border-white\/\[0\.06\],
+.theme-dark .border-white\/\[0\.07\],
+.theme-windows11 .border-white\/\[0\.07\],
+.theme-light .border-white\/\[0\.07\],
+.theme-dark .border-white\/\[0\.08\],
+.theme-windows11 .border-white\/\[0\.08\],
+.theme-light .border-white\/\[0\.08\],
+.theme-dark .border-white\/10,
+.theme-windows11 .border-white\/10,
+.theme-light .border-white\/10 {
+  border-color: var(--dgod-border) !important;
 }
-.theme-light .border-slate-700 {
-  border-color: #52525b !important;
+
+.theme-dark .border-slate-700,
+.theme-dark .border-slate-700\/90,
+.theme-dark .border-slate-700\/80,
+.theme-windows11 .border-slate-700,
+.theme-windows11 .border-slate-700\/90,
+.theme-windows11 .border-slate-700\/80,
+.theme-light .border-slate-700,
+.theme-light .border-slate-700\/90,
+.theme-light .border-slate-700\/80,
+.theme-dark .border-\[\#34343c\],
+.theme-windows11 .border-\[\#34343c\],
+.theme-light .border-\[\#34343c\] {
+  border-color: var(--dgod-border-strong) !important;
 }
-.theme-light .hover\:bg-slate-900:hover {
-  background-color: #2f2f35 !important;
+
+.theme-dark .hover\:bg-slate-950:hover,
+.theme-dark .hover\:bg-slate-950\/90:hover,
+.theme-dark .hover\:bg-slate-950\/80:hover,
+.theme-dark .hover\:bg-slate-950\/70:hover,
+.theme-dark .hover\:bg-slate-950\/60:hover,
+.theme-dark .hover\:bg-slate-950\/50:hover,
+.theme-dark .hover\:bg-slate-950\/40:hover,
+.theme-windows11 .hover\:bg-slate-950:hover,
+.theme-windows11 .hover\:bg-slate-950\/90:hover,
+.theme-windows11 .hover\:bg-slate-950\/80:hover,
+.theme-windows11 .hover\:bg-slate-950\/70:hover,
+.theme-windows11 .hover\:bg-slate-950\/60:hover,
+.theme-windows11 .hover\:bg-slate-950\/50:hover,
+.theme-windows11 .hover\:bg-slate-950\/40:hover,
+.theme-light .hover\:bg-slate-950:hover,
+.theme-light .hover\:bg-slate-950\/90:hover,
+.theme-light .hover\:bg-slate-950\/80:hover,
+.theme-light .hover\:bg-slate-950\/70:hover,
+.theme-light .hover\:bg-slate-950\/60:hover,
+.theme-light .hover\:bg-slate-950\/50:hover,
+.theme-light .hover\:bg-slate-950\/40:hover,
+.theme-dark .hover\:bg-slate-900:hover,
+.theme-dark .hover\:bg-slate-900\/98:hover,
+.theme-dark .hover\:bg-slate-900\/95:hover,
+.theme-dark .hover\:bg-slate-900\/90:hover,
+.theme-dark .hover\:bg-slate-900\/80:hover,
+.theme-dark .hover\:bg-slate-900\/70:hover,
+.theme-dark .hover\:bg-slate-900\/60:hover,
+.theme-dark .hover\:bg-slate-900\/50:hover,
+.theme-dark .hover\:bg-slate-900\/40:hover,
+.theme-dark .hover\:bg-slate-900\/30:hover,
+.theme-dark .hover\:bg-slate-900\/20:hover,
+.theme-windows11 .hover\:bg-slate-900:hover,
+.theme-windows11 .hover\:bg-slate-900\/98:hover,
+.theme-windows11 .hover\:bg-slate-900\/95:hover,
+.theme-windows11 .hover\:bg-slate-900\/90:hover,
+.theme-windows11 .hover\:bg-slate-900\/80:hover,
+.theme-windows11 .hover\:bg-slate-900\/70:hover,
+.theme-windows11 .hover\:bg-slate-900\/60:hover,
+.theme-windows11 .hover\:bg-slate-900\/50:hover,
+.theme-windows11 .hover\:bg-slate-900\/40:hover,
+.theme-windows11 .hover\:bg-slate-900\/30:hover,
+.theme-windows11 .hover\:bg-slate-900\/20:hover,
+.theme-light .hover\:bg-slate-900:hover,
+.theme-light .hover\:bg-slate-900\/98:hover,
+.theme-light .hover\:bg-slate-900\/95:hover,
+.theme-light .hover\:bg-slate-900\/90:hover,
+.theme-light .hover\:bg-slate-900\/80:hover,
+.theme-light .hover\:bg-slate-900\/70:hover,
+.theme-light .hover\:bg-slate-900\/60:hover,
+.theme-light .hover\:bg-slate-900\/50:hover,
+.theme-light .hover\:bg-slate-900\/40:hover,
+.theme-light .hover\:bg-slate-900\/30:hover,
+.theme-light .hover\:bg-slate-900\/20:hover {
+  background-color: var(--dgod-bg-surface-elevated) !important;
 }
-.theme-light .hover\:bg-slate-800:hover {
-  background-color: #3f3f46 !important;
+
+.theme-dark .hover\:bg-slate-850:hover,
+.theme-windows11 .hover\:bg-slate-850:hover,
+.theme-light .hover\:bg-slate-850:hover,
+.theme-dark .hover\:bg-slate-800:hover,
+.theme-dark .hover\:bg-slate-800\/90:hover,
+.theme-dark .hover\:bg-slate-800\/80:hover,
+.theme-dark .hover\:bg-slate-800\/70:hover,
+.theme-dark .hover\:bg-slate-800\/60:hover,
+.theme-dark .hover\:bg-slate-800\/50:hover,
+.theme-dark .hover\:bg-slate-800\/40:hover,
+.theme-dark .hover\:bg-slate-800\/30:hover,
+.theme-dark .hover\:bg-slate-800\/20:hover,
+.theme-windows11 .hover\:bg-slate-800:hover,
+.theme-windows11 .hover\:bg-slate-800\/90:hover,
+.theme-windows11 .hover\:bg-slate-800\/80:hover,
+.theme-windows11 .hover\:bg-slate-800\/70:hover,
+.theme-windows11 .hover\:bg-slate-800\/60:hover,
+.theme-windows11 .hover\:bg-slate-800\/50:hover,
+.theme-windows11 .hover\:bg-slate-800\/40:hover,
+.theme-windows11 .hover\:bg-slate-800\/30:hover,
+.theme-windows11 .hover\:bg-slate-800\/20:hover,
+.theme-light .hover\:bg-slate-800:hover,
+.theme-light .hover\:bg-slate-800\/90:hover,
+.theme-light .hover\:bg-slate-800\/80:hover,
+.theme-light .hover\:bg-slate-800\/70:hover,
+.theme-light .hover\:bg-slate-800\/60:hover,
+.theme-light .hover\:bg-slate-800\/50:hover,
+.theme-light .hover\:bg-slate-800\/40:hover,
+.theme-light .hover\:bg-slate-800\/30:hover,
+.theme-light .hover\:bg-slate-800\/20:hover,
+.theme-dark .hover\:bg-slate-700:hover,
+.theme-dark .hover\:bg-slate-700\/80:hover,
+.theme-dark .hover\:bg-slate-700\/60:hover,
+.theme-windows11 .hover\:bg-slate-700:hover,
+.theme-windows11 .hover\:bg-slate-700\/80:hover,
+.theme-windows11 .hover\:bg-slate-700\/60:hover,
+.theme-light .hover\:bg-slate-700:hover,
+.theme-light .hover\:bg-slate-700\/80:hover,
+.theme-light .hover\:bg-slate-700\/60:hover,
+.theme-dark .hover\:bg-\[\#232329\]:hover,
+.theme-windows11 .hover\:bg-\[\#232329\]:hover,
+.theme-light .hover\:bg-\[\#232329\]:hover {
+  background-color: var(--dgod-bg-surface-elevated) !important;
 }
-.theme-light .text-slate-400 {
-  color: #d4d4d8 !important;
+
+/* Hover and group-hover text contrast overrides for Light mode */
+.theme-light .hover\:text-white:hover,
+.theme-light .group:hover .group-hover\:text-white,
+.theme-light .hover\:text-slate-100:hover,
+.theme-light .group:hover .group-hover\:text-slate-100,
+.theme-light .hover\:text-slate-200:hover,
+.theme-light .group:hover .group-hover\:text-slate-200 {
+  color: var(--dgod-text-primary) !important;
 }
-.theme-light .text-slate-500 {
-  color: #a1a1aa !important;
+
+.theme-light .hover\:text-slate-300:hover,
+.theme-light .group:hover .group-hover\:text-slate-300,
+.theme-light .hover\:text-slate-400:hover,
+.theme-light .group:hover .group-hover\:text-slate-400 {
+  color: var(--dgod-text-secondary) !important;
 }
-.theme-light .text-slate-300 {
-  color: #f4f4f5 !important;
+
+/* Ring colors for light mode indicator dots */
+.theme-light .ring-slate-950,
+.theme-light .ring-slate-900 {
+  --tw-ring-color: var(--dgod-bg-sidebar) !important;
 }
+.theme-light .group:hover .ring-slate-950,
+.theme-light .group:hover .ring-slate-900 {
+  --tw-ring-color: var(--dgod-bg-surface-elevated) !important;
+}
+
+/* Light mode border overrides on hover */
+.theme-light .hover\:border-slate-800:hover,
+.theme-light .hover\:border-slate-700:hover {
+  border-color: var(--dgod-border-strong) !important;
+}
+
+.theme-dark .text-white,
+.theme-windows11 .text-white,
+.theme-light .text-white,
+.theme-dark .text-slate-100,
+.theme-windows11 .text-slate-100,
+.theme-light .text-slate-100,
+.theme-dark .text-slate-200,
+.theme-windows11 .text-slate-200,
+.theme-light .text-slate-200,
+.theme-dark .text-zinc-100,
+.theme-windows11 .text-zinc-100,
+.theme-light .text-zinc-100,
+.theme-dark .text-zinc-200,
+.theme-windows11 .text-zinc-200,
+.theme-light .text-zinc-200 {
+  color: var(--dgod-text-primary) !important;
+}
+
+.theme-dark .text-slate-300,
+.theme-windows11 .text-slate-300,
+.theme-light .text-slate-300,
+.theme-dark .text-slate-400,
+.theme-windows11 .text-slate-400,
+.theme-light .text-slate-400,
+.theme-dark .text-zinc-300,
+.theme-windows11 .text-zinc-300,
+.theme-light .text-zinc-300,
+.theme-dark .text-zinc-400,
+.theme-windows11 .text-zinc-400,
+.theme-light .text-zinc-400 {
+  color: var(--dgod-text-secondary) !important;
+}
+
+.theme-dark .text-slate-500,
+.theme-windows11 .text-slate-500,
+.theme-light .text-slate-500,
+.theme-dark .text-zinc-500,
+.theme-windows11 .text-zinc-500,
+.theme-light .text-zinc-500 {
+  color: var(--dgod-text-muted) !important;
+}
+
+/* Accessible High-Contrast Colored Accents for Light Mode */
+.theme-light .text-purple-200,
+.theme-light .text-purple-300,
+.theme-light .text-purple-400 {
+  color: #8f3f71 !important;
+}
+
+.theme-light .text-indigo-200,
+.theme-light .text-indigo-300,
+.theme-light .text-indigo-400 {
+  color: #076678 !important;
+}
+
+.theme-light .text-sky-200 {
+  color: #076678 !important;
+}
+
+.theme-light .text-amber-200,
+.theme-light .text-amber-300,
+.theme-light .text-amber-400 {
+  color: #945700 !important;
+}
+
+.theme-light .text-emerald-200,
+.theme-light .text-emerald-300,
+.theme-light .text-emerald-400 {
+  color: #2e7d32 !important;
+}
+
+.theme-light .text-red-200,
+.theme-light .text-red-300,
+.theme-light .text-red-400,
+.theme-light .text-rose-200,
+.theme-light .text-rose-300,
+.theme-light .text-rose-400 {
+  color: #9d0006 !important;
+}
+
+/* Light mode overrides for 950 and colored pill backgrounds */
+.theme-light .bg-emerald-950,
+.theme-light .bg-emerald-950\/90,
+.theme-light .bg-emerald-950\/80,
+.theme-light .bg-emerald-950\/60,
+.theme-light .bg-emerald-950\/50,
+.theme-light .bg-emerald-950\/40,
+.theme-light .bg-emerald-950\/30,
+.theme-light .bg-emerald-950\/20,
+.theme-light .bg-emerald-600\/30 {
+  background-color: rgba(46, 125, 50, 0.12) !important;
+}
+.theme-light .hover\:bg-emerald-600\/50:hover {
+  background-color: rgba(46, 125, 50, 0.22) !important;
+}
+.theme-light .border-emerald-800\/60,
+.theme-light .border-emerald-500\/40 {
+  border-color: rgba(46, 125, 50, 0.35) !important;
+}
+
+.theme-light .bg-amber-950,
+.theme-light .bg-amber-950\/90,
+.theme-light .bg-amber-950\/80,
+.theme-light .bg-amber-950\/60,
+.theme-light .bg-amber-950\/50,
+.theme-light .bg-amber-950\/40,
+.theme-light .bg-amber-950\/30,
+.theme-light .bg-amber-950\/20,
+.theme-light .bg-amber-500\/15 {
+  background-color: rgba(214, 93, 14, 0.12) !important;
+}
+.theme-light .hover\:bg-amber-500\/25:hover {
+  background-color: rgba(214, 93, 14, 0.22) !important;
+}
+.theme-light .border-amber-800\/60,
+.theme-light .border-amber-500\/40 {
+  border-color: rgba(214, 93, 14, 0.35) !important;
+}
+
+.theme-light .bg-red-950,
+.theme-light .bg-red-950\/90,
+.theme-light .bg-red-950\/80,
+.theme-light .bg-red-950\/60,
+.theme-light .bg-red-950\/50,
+.theme-light .bg-red-950\/40,
+.theme-light .bg-red-950\/30,
+.theme-light .bg-red-950\/20,
+.theme-light .bg-rose-950,
+.theme-light .bg-rose-950\/90,
+.theme-light .bg-rose-950\/80,
+.theme-light .bg-rose-950\/60,
+.theme-light .bg-rose-950\/50,
+.theme-light .bg-rose-950\/40,
+.theme-light .bg-rose-950\/30,
+.theme-light .bg-rose-950\/20 {
+  background-color: rgba(197, 34, 31, 0.12) !important;
+}
+.theme-light .border-red-800\/60,
+.theme-light .border-red-500\/40,
+.theme-light .border-rose-500\/80 {
+  border-color: rgba(197, 34, 31, 0.35) !important;
+}
+
+.theme-light .bg-indigo-950,
+.theme-light .bg-indigo-950\/90,
+.theme-light .bg-indigo-950\/80,
+.theme-light .bg-indigo-950\/60,
+.theme-light .bg-indigo-950\/50,
+.theme-light .bg-indigo-950\/40,
+.theme-light .bg-indigo-950\/30,
+.theme-light .bg-indigo-950\/20,
+.theme-light .bg-sky-600\/30 {
+  background-color: rgba(7, 102, 120, 0.12) !important;
+}
+.theme-light .hover\:bg-sky-600\/50:hover {
+  background-color: rgba(7, 102, 120, 0.22) !important;
+}
+.theme-light .border-indigo-700\/60,
+.theme-light .border-sky-500\/40 {
+  border-color: rgba(7, 102, 120, 0.35) !important;
+}
+
+/* Dynamic Theme Accent Overrides */
+.theme-dark .bg-sky-600,
+.theme-windows11 .bg-sky-600,
+.theme-light .bg-sky-600,
+.theme-dark .bg-sky-500,
+.theme-windows11 .bg-sky-500,
+.theme-light .bg-sky-500 {
+  background-color: var(--dgod-accent) !important;
+  color: #1c1d1e !important;
+}
+
+.theme-dark .hover\:bg-sky-500:hover,
+.theme-windows11 .hover\:bg-sky-500:hover,
+.theme-light .hover\:bg-sky-500:hover {
+  background-color: var(--dgod-accent-hover) !important;
+}
+
+.theme-dark .text-sky-400,
+.theme-windows11 .text-sky-400,
+.theme-light .text-sky-400,
+.theme-dark .text-sky-300,
+.theme-windows11 .text-sky-300,
+.theme-light .text-sky-300 {
+  color: var(--dgod-accent) !important;
+}
+
+.theme-dark .border-sky-500,
+.theme-windows11 .border-sky-500,
+.theme-light .border-sky-500,
+.theme-dark .border-sky-500\/50,
+.theme-windows11 .border-sky-500\/50,
+.theme-light .border-sky-500\/50,
+.theme-dark .border-sky-500\/40,
+.theme-windows11 .border-sky-500\/40,
+.theme-light .border-sky-500\/40,
+.theme-dark .border-sky-500\/30,
+.theme-windows11 .border-sky-500\/30,
+.theme-light .border-sky-500\/30 {
+  border-color: var(--dgod-accent-border) !important;
+}
+
+.theme-dark .bg-sky-500\/20,
+.theme-windows11 .bg-sky-500\/20,
+.theme-light .bg-sky-500\/20,
+.theme-dark .bg-sky-500\/15,
+.theme-windows11 .bg-sky-500\/15,
+.theme-light .bg-sky-500\/15,
+.theme-dark .bg-sky-500\/10,
+.theme-windows11 .bg-sky-500\/10,
+.theme-light .bg-sky-500\/10 {
+  background-color: var(--dgod-accent-muted) !important;
+}
+
+.theme-dark select option,
+.theme-windows11 select option,
+.theme-light select option {
+  background-color: var(--dgod-bg-surface) !important;
+  color: var(--dgod-text-primary) !important;
+}
+
+/* Windows 11 Dialog Universal Theme Rules */
+.win11-dialog-card {
+  background-color: var(--dgod-bg-surface) !important;
+  color: var(--dgod-text-primary) !important;
+  border-color: var(--dgod-border-strong) !important;
+}
+
+.win11-dialog-title {
+  color: var(--dgod-text-primary) !important;
+}
+
+.win11-dialog-message {
+  color: var(--dgod-text-primary) !important;
+  opacity: 1 !important;
+}
+
+.win11-dialog-badge {
+  background-color: var(--dgod-bg-surface-elevated) !important;
+  color: var(--dgod-text-primary) !important;
+  border-color: var(--dgod-border-strong) !important;
+}
+
+.win11-dialog-close-btn {
+  color: var(--dgod-text-secondary) !important;
+}
+
+.win11-dialog-close-btn:hover {
+  background-color: var(--dgod-bg-surface-elevated) !important;
+  color: var(--dgod-text-primary) !important;
+}
+
+.win11-dialog-input {
+  background-color: var(--dgod-bg-app) !important;
+  color: var(--dgod-text-primary) !important;
+  border-color: var(--dgod-border-strong) !important;
+}
+
+.win11-dialog-footer {
+  background-color: var(--dgod-bg-surface-elevated) !important;
+  border-top-color: var(--dgod-border-subtle) !important;
+}
+
+.win11-dialog-secondary-btn {
+  background-color: var(--dgod-bg-surface) !important;
+  color: var(--dgod-text-primary) !important;
+  border-color: var(--dgod-border-strong) !important;
+}
+
+.win11-dialog-secondary-btn:hover {
+  background-color: var(--dgod-bg-app) !important;
+}
+
+.win11-dialog-primary-btn,
+.win11-dialog-primary-btn *,
+.win11-dialog-primary-btn span,
+.theme-light .win11-dialog-primary-btn,
+.theme-dark .win11-dialog-primary-btn,
+.theme-windows11 .win11-dialog-primary-btn,
+.theme-light .win11-dialog-primary-btn *,
+.theme-dark .win11-dialog-primary-btn *,
+.theme-windows11 .win11-dialog-primary-btn *,
+button.win11-dialog-primary-btn,
+button.win11-dialog-primary-btn *,
+.theme-light button.bg-\[\#c42b1c\],
+.theme-dark button.bg-\[\#c42b1c\],
+.theme-windows11 button.bg-\[\#c42b1c\],
+button.bg-\[\#c42b1c\],
+button.bg-\[\#c42b1c\] *,
+.theme-light button.bg-red-600,
+.theme-dark button.bg-red-600,
+.theme-windows11 button.bg-red-600,
+button.bg-red-600,
+button.bg-red-600 * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Fallback legacy utility classes for Windows 11 dialog */
+.theme-light .text-\[\#cccccc\],
+.theme-dark .text-\[\#cccccc\],
+.theme-windows11 .text-\[\#cccccc\] {
+  color: var(--dgod-text-primary) !important;
+}
+
+.theme-light .text-\[\#e0e0e0\],
+.theme-dark .text-\[\#e0e0e0\],
+.theme-windows11 .text-\[\#e0e0e0\] {
+  color: var(--dgod-text-primary) !important;
+}
+
+.theme-light .bg-\[\#1f1f1f\],
+.theme-dark .bg-\[\#1f1f1f\],
+.theme-windows11 .bg-\[\#1f1f1f\] {
+  background-color: var(--dgod-bg-surface-elevated) !important;
+}
+
+.theme-light .bg-\[\#2e2e2e\],
+.theme-dark .bg-\[\#2e2e2e\],
+.theme-windows11 .bg-\[\#2e2e2e\],
+.theme-light .bg-\[\#2d2d2d\],
+.theme-dark .bg-\[\#2d2d2d\],
+.theme-windows11 .bg-\[\#2d2d2d\] {
+  background-color: var(--dgod-bg-surface) !important;
+}
+
+/* ======================================================== */
+/* ANTIGRAVITY APPEARANCE SETTINGS CARDS & PILL CONTROLS    */
+/* ======================================================== */
+
+.agy-section-title {
+  color: var(--dgod-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.agy-card {
+  background-color: var(--dgod-bg-app);
+  border: 1px solid var(--dgod-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.agy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--dgod-border-subtle);
+  gap: 16px;
+}
+
+.agy-row:last-child {
+  border-bottom: none;
+}
+
+.agy-row-label {
+  color: var(--dgod-text-primary);
+  font-size: 13.5px;
+  font-weight: 400;
+}
+
+.agy-row-sublabel {
+  color: var(--dgod-text-secondary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.agy-pill-group {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--dgod-bg-app);
+  border: 1px solid var(--dgod-border-strong);
+  border-radius: 9999px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.agy-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dgod-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.agy-pill-btn:hover {
+  color: var(--dgod-text-primary);
+}
+
+.agy-pill-btn.active {
+  background-color: var(--dgod-bg-surface-elevated);
+  color: var(--dgod-text-primary);
+  border-color: var(--dgod-border-strong);
+  font-weight: 500;
+}
+
+.agy-select-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--dgod-bg-surface);
+  border: 1px solid var(--dgod-border-strong);
+  border-radius: 9999px;
+  padding: 5px 32px 5px 16px;
+  font-size: 13px;
+  color: var(--dgod-text-primary);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.agy-select-pill:hover {
+  background-color: var(--dgod-bg-surface-elevated);
+  border-color: var(--dgod-text-muted);
+}
+
+.agy-color-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--dgod-bg-app);
+  border: 1px solid var(--dgod-border-strong);
+  border-radius: 9999px;
+  padding: 4px 14px 4px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.agy-color-pill:hover {
+  background-color: var(--dgod-bg-surface);
+  border-color: var(--dgod-text-muted);
+}
+
+
 

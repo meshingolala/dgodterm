@@ -195,13 +195,13 @@ export const TunnelManagerView: React.FC = () => {
       {/* Top Banner */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/40">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-purple-950/60 border border-purple-800 text-purple-400">
+          <div className="p-2 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400">
             <Network className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-100 flex items-center gap-2">
               SSH Port Forwarding & Tunnels Manager
-              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-purple-950 border border-purple-800 text-purple-300">
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-slate-300">
                 {tunnels.length} Configured
               </span>
             </h1>
@@ -222,7 +222,7 @@ export const TunnelManagerView: React.FC = () => {
           </button>
           <button
             onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-slate-950 font-semibold text-xs transition cursor-pointer shadow-md"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--dgod-accent)] hover:bg-[var(--dgod-accent-hover)] text-white font-semibold text-xs transition cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>New Port Forward</span>
@@ -255,7 +255,7 @@ export const TunnelManagerView: React.FC = () => {
             </div>
             <button
               onClick={openCreateModal}
-              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-slate-950 font-semibold text-xs transition cursor-pointer"
+              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--dgod-accent)] hover:bg-[var(--dgod-accent-hover)] text-white font-semibold text-xs transition cursor-pointer shadow-sm"
             >
               <Plus className="w-4 h-4" />
               <span>Create First Tunnel</span>
@@ -277,10 +277,10 @@ export const TunnelManagerView: React.FC = () => {
                 <div className="flex items-center gap-4 flex-1">
                   <div className={`p-2.5 rounded-lg border ${
                     isRunning
-                      ? 'bg-emerald-950/60 border-emerald-800 text-emerald-400'
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                       : isError
-                      ? 'bg-red-950/60 border-red-800 text-red-400'
-                      : 'bg-slate-950 border-slate-800 text-slate-500'
+                      ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                      : 'bg-slate-800/80 border-slate-700/60 text-slate-400'
                   }`}>
                     {tun.type === 'dynamic' ? (
                       <Globe className="w-5 h-5" />
@@ -294,10 +294,10 @@ export const TunnelManagerView: React.FC = () => {
                       <span className="font-semibold text-slate-200 text-sm">{tun.name}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono uppercase font-semibold ${
                         tun.type === 'local'
-                          ? 'bg-sky-950 border border-sky-800 text-sky-300'
+                          ? 'bg-sky-500/15 border border-sky-500/40 text-sky-400'
                           : tun.type === 'remote'
-                          ? 'bg-purple-950 border border-purple-800 text-purple-300'
-                          : 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                          ? 'bg-purple-500/15 border border-purple-500/40 text-purple-400'
+                          : 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-400'
                       }`}>
                         {tun.type === 'dynamic' ? 'Dynamic SOCKS5' : tun.type + ' Forward'}
                       </span>
@@ -311,16 +311,16 @@ export const TunnelManagerView: React.FC = () => {
 
                     {/* Port Routing Visual */}
                     <div className="flex items-center gap-2 text-xs font-mono text-slate-300 pt-0.5">
-                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-sky-300">
+                      <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-700/60 text-sky-400">
                         {tun.localHost || '127.0.0.1'}:{tun.localPort}
                       </span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                       {tun.type === 'dynamic' ? (
-                        <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-emerald-300">
+                        <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-700/60 text-emerald-400">
                           Internet / Any Host (SOCKS5 Proxy)
                         </span>
                       ) : (
-                        <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-purple-300">
+                        <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-700/60 text-purple-400">
                           {tun.remoteHost || '127.0.0.1'}:{tun.remotePort}
                         </span>
                       )}
@@ -376,17 +376,17 @@ export const TunnelManagerView: React.FC = () => {
                   {isRunning ? (
                     <button
                       onClick={() => handleStopTunnel(tun.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold transition cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition cursor-pointer shadow-sm"
                     >
-                      <Square className="w-3.5 h-3.5 fill-red-200" />
+                      <Square className="w-3.5 h-3.5 fill-white" />
                       <span>Stop</span>
                     </button>
                   ) : (
                     <button
                       onClick={() => handleStartTunnel(tun.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-semibold transition cursor-pointer shadow-sm"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition cursor-pointer shadow-sm"
                     >
-                      <Play className="w-3.5 h-3.5 fill-slate-950" />
+                      <Play className="w-3.5 h-3.5 fill-white" />
                       <span>Start</span>
                     </button>
                   )}
@@ -419,7 +419,7 @@ export const TunnelManagerView: React.FC = () => {
           <div className="bg-slate-900 border border-slate-700/80 rounded-xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/60">
               <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-                <Network className="w-4 h-4 text-purple-400" />
+                <Network className="w-4 h-4 text-sky-400" />
                 {editingId ? 'Edit Port Forwarding' : 'Configure New Port Forwarding'}
               </h3>
               <button
@@ -439,7 +439,7 @@ export const TunnelManagerView: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Postgres DB Forward, App Proxy, SOCKS5"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-purple-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-[var(--dgod-accent)]"
                 />
               </div>
 
@@ -474,7 +474,7 @@ export const TunnelManagerView: React.FC = () => {
                     value={localHost}
                     onChange={(e) => setLocalHost(e.target.value)}
                     placeholder="127.0.0.1 or 0.0.0.0"
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-purple-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-[var(--dgod-accent)]"
                   />
                 </div>
                 <div>
@@ -486,7 +486,7 @@ export const TunnelManagerView: React.FC = () => {
                     max={65535}
                     value={localPort}
                     onChange={(e) => setLocalPort(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-purple-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-[var(--dgod-accent)]"
                   />
                 </div>
               </div>
@@ -502,7 +502,7 @@ export const TunnelManagerView: React.FC = () => {
                       value={remoteHost}
                       onChange={(e) => setRemoteHost(e.target.value)}
                       placeholder="127.0.0.1 or internal.db"
-                      className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-purple-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-[var(--dgod-accent)]"
                     />
                   </div>
                   <div>
@@ -514,7 +514,7 @@ export const TunnelManagerView: React.FC = () => {
                       max={65535}
                       value={remotePort}
                       onChange={(e) => setRemotePort(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-purple-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:border-[var(--dgod-accent)]"
                     />
                   </div>
                 </div>
@@ -530,7 +530,7 @@ export const TunnelManagerView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-slate-950 font-semibold transition cursor-pointer shadow-md"
+                  className="px-4 py-1.5 rounded-lg bg-[var(--dgod-accent)] hover:bg-[var(--dgod-accent-hover)] text-white font-semibold transition cursor-pointer shadow-sm"
                 >
                   Save Tunnel
                 </button>

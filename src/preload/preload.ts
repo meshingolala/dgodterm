@@ -250,6 +250,20 @@ export const dgodtermApi = {
   showNotification: (title: string, body: string, icon?: string) =>
     ipcRenderer.invoke('notification:show', { title, body, icon }),
 
+  // MobaXterm X11 Display Server
+  getX11Status: () => ipcRenderer.invoke('x11:get-status'),
+  launchX11Server: (path?: string) => ipcRenderer.invoke('x11:launch-server', { path }),
+  installVcXsrv: () => ipcRenderer.invoke('x11:install-vcxsrv'),
+
+  // MobaXterm PuTTY Registry Importer
+  getPuTTYAvailableSessions: () => ipcRenderer.invoke('putty:get-sessions'),
+  importPuTTYProfiles: (sessions?: any[], folderId?: string | null) =>
+    ipcRenderer.invoke('putty:import-sessions', { sessions, folderId }),
+
+  // Native Remote Desktop (RDP) Launcher
+  launchRdp: (hostname: string, port?: number, username?: string) =>
+    ipcRenderer.invoke('rdp:launch', { hostname, port, username }),
+
   // Workstation Power & Idle Monitoring
   getSystemIdleTime: () =>
     ipcRenderer.invoke('system:get-idle-time'),
@@ -268,7 +282,48 @@ export const dgodtermApi = {
     const handler = (_event: any, isMaximized: boolean) => callback(isMaximized);
     ipcRenderer.on('window:maximized-change', handler);
     return () => ipcRenderer.removeListener('window:maximized-change', handler);
-  }
+  },
+
+  // Application Menu Actions
+  onMenuOpenSettings: (callback: (tabType?: string) => void) => {
+    const handler = (_event: any, tabType?: string) => callback(tabType);
+    ipcRenderer.on('menu:open-settings', handler);
+    return () => ipcRenderer.removeListener('menu:open-settings', handler);
+  },
+  onMenuLockWorkstation: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:lock-workstation', handler);
+    return () => ipcRenderer.removeListener('menu:lock-workstation', handler);
+  },
+  onMenuNewTerminal: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:new-terminal', handler);
+    return () => ipcRenderer.removeListener('menu:new-terminal', handler);
+  },
+  onMenuNewProfile: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:new-profile', handler);
+    return () => ipcRenderer.removeListener('menu:new-profile', handler);
+  },
+  onMenuCloseTab: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:close-tab', handler);
+    return () => ipcRenderer.removeListener('menu:close-tab', handler);
+  },
+  onMenuToggleSidebar: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:toggle-sidebar', handler);
+    return () => ipcRenderer.removeListener('menu:toggle-sidebar', handler);
+  },
+  onMenuClearTerminal: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:clear-terminal', handler);
+    return () => ipcRenderer.removeListener('menu:clear-terminal', handler);
+  },
+  syncTabsToNative: (_tabs: any[], _activeTabId: string, _tabStyle?: string, _accentColor?: string) => {},
+  syncUiSettingsToNative: (_settings: any) => {},
+  isElectron: true,
+  platform: process.platform
 };
 
 contextBridge.exposeInMainWorld('dgodterm', dgodtermApi);

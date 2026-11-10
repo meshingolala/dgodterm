@@ -28,7 +28,7 @@ interface ImportExportModalProps {
   onClose: () => void;
   onRefreshProfiles: () => void;
   folders?: Folder[];
-  initialTab?: 'import-hosts' | 'export' | 'disaster-recovery';
+  initialTab?: 'import-hosts' | 'import-putty' | 'export' | 'disaster-recovery';
 }
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({
@@ -37,7 +37,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   folders = [],
   initialTab = 'import-hosts'
 }) => {
-  const [activeTab, setActiveTab] = useState<'import-hosts' | 'export' | 'disaster-recovery'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'import-hosts' | 'import-putty' | 'export' | 'disaster-recovery'>(initialTab);
 
   // SSH Hosts Batch Import State
   const [inputText, setInputText] = useState('');
@@ -48,6 +48,46 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [parsedHosts, setParsedHosts] = useState<ParsedSshHost[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success?: boolean; count?: number; error?: string } | null>(null);
+
+  // PuTTY / MobaXterm Importer State
+  const [puttySessions, setPuttySessions] = useState<any[]>([]);
+  const [selectedPuttyIndices, setSelectedPuttyIndices] = useState<Record<number, boolean>>({});
+  const [isLoadingPutty, setIsLoadingPutty] = useState(false);
+  const [puttyFolderId, setPuttyFolderId] = useState<string | null>(null);
+  const [puttyImportResult, setPuttyImportResult] = useState<{ success?: boolean; count?: number; error?: string } | null>(null);
+
+  const loadPuttySessions = async () => {
+    setIsLoadingPutty(true);
+    setPuttyImportResult(null);
+    try {
+      const sessions = await (window as any).dgodterm?.getPuTTYAvailableSessions?.();
+      const list = sessions || [];
+      setPuttySessions(list);
+      const selected: Record<number, boolean> = {};
+      list.forEach((_: any, idx: number) => { selected[idx] = true; });
+      setSelectedPuttyIndices(selected);
+    } catch (e: any) {
+      console.warn('Failed to load PuTTY sessions:', e);
+      setPuttySessions([]);
+    } finally {
+      setIsLoadingPutty(false);
+    }
+  };
+
+  const handleImportPuttySessions = async () => {
+    const toImport = puttySessions.filter((_, idx) => selectedPuttyIndices[idx]);
+    if (toImport.length === 0) return;
+    setIsImporting(true);
+    try {
+      const res = await (window as any).dgodterm?.importPuTTYProfiles?.(toImport, puttyFolderId);
+      setPuttyImportResult({ success: true, count: res?.importedCount || toImport.length });
+      onRefreshProfiles();
+    } catch (e: any) {
+      setPuttyImportResult({ success: false, error: e.message || 'Import failed' });
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Export State
   const [exportedJson, setExportedJson] = useState('');
@@ -273,7 +313,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             className={`flex-1 py-3 font-semibold text-center border-b-2 transition flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'import-hosts'
                 ? 'border-sky-500 text-sky-300 bg-slate-900/50 shadow-inner'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <Upload className="w-4 h-4 text-sky-400" />
@@ -284,18 +324,29 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             className={`flex-1 py-3 font-semibold text-center border-b-2 transition flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'export'
                 ? 'border-indigo-500 text-indigo-300 bg-slate-900/50 shadow-inner'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <Download className="w-4 h-4 text-indigo-400" />
             <span>Export Fleet Profiles</span>
           </button>
           <button
+            onClick={() => { setActiveTab('import-putty'); loadPuttySessions(); }}
+            className={`flex-1 py-3 font-semibold text-center border-b-2 transition flex items-center justify-center gap-2 cursor-pointer ${
+              activeTab === 'import-putty'
+                ? 'border-purple-500 text-purple-300 bg-slate-900/50 shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <span>Import PuTTY &amp; MobaXterm</span>
+          </button>
+          <button
             onClick={() => setActiveTab('disaster-recovery')}
             className={`flex-1 py-3 font-semibold text-center border-b-2 transition flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'disaster-recovery'
                 ? 'border-amber-500 text-amber-300 bg-slate-900/50 shadow-inner'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <Lock className="w-4 h-4 text-amber-400" />
@@ -766,6 +817,153 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                     <>
                       <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                       <span>{drStatus.error}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: IMPORT PUTTY / MOBAXTERM SESSIONS */}
+          {activeTab === 'import-putty' && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <span>PuTTY &amp; MobaXterm Registry Session Importer</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Scans Windows Registry (<code className="text-purple-300 font-mono text-[11px]">HKCU\Software\SimonTatham\PuTTY\Sessions</code>) to seamlessly import your existing connections, host keys, and port configs into DgodTerm.
+                  </p>
+                </div>
+                <button
+                  onClick={loadPuttySessions}
+                  disabled={isLoadingPutty}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-purple-400 ${isLoadingPutty ? 'animate-spin' : ''}`} />
+                  <span>Rescan Registry</span>
+                </button>
+              </div>
+
+              {/* Target Folder Selector */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
+                <FolderIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-medium text-slate-300">Assign to Folder:</span>
+                <select
+                  value={puttyFolderId || ''}
+                  onChange={(e) => setPuttyFolderId(e.target.value || null)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-purple-500"
+                >
+                  <option value="">(No Folder / Root)</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sessions Table */}
+              {isLoadingPutty ? (
+                <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
+                  <span>Scanning Windows Registry for PuTTY / MobaXterm sessions...</span>
+                </div>
+              ) : puttySessions.length === 0 ? (
+                <div className="py-10 text-center rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-xs text-slate-400 space-y-1">
+                  <div className="font-semibold text-slate-300">No saved PuTTY sessions found</div>
+                  <p className="text-[11px] text-slate-500">
+                    No session keys were detected under HKCU\Software\SimonTatham\PuTTY\Sessions on this Windows machine.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs px-1">
+                    <span className="text-slate-400">
+                      Found <strong className="text-white">{puttySessions.length}</strong> saved sessions in registry:
+                    </span>
+                    <button
+                      onClick={() => {
+                        const allSelected = Object.values(selectedPuttyIndices).every(Boolean);
+                        const next: Record<number, boolean> = {};
+                        puttySessions.forEach((_, idx) => { next[idx] = !allSelected; });
+                        setSelectedPuttyIndices(next);
+                      }}
+                      className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+                    >
+                      {Object.values(selectedPuttyIndices).every(Boolean) ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto border border-slate-800 rounded-xl bg-slate-950/80 divide-y divide-slate-850">
+                    {puttySessions.map((s, idx) => {
+                      const isChecked = selectedPuttyIndices[idx] !== false;
+                      return (
+                        <label
+                          key={s.rawName || idx}
+                          className={`flex items-center justify-between p-2.5 px-3 cursor-pointer transition hover:bg-slate-900/80 ${
+                            isChecked ? 'bg-purple-950/15' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                setSelectedPuttyIndices((prev) => ({ ...prev, [idx]: e.target.checked }));
+                              }}
+                              className="rounded bg-slate-900 border-slate-700 text-purple-500 focus:ring-0"
+                            />
+                            <div className="truncate">
+                              <span className="font-semibold text-white text-xs block truncate">{s.name}</span>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {s.username}@{s.hostname}:{s.port}
+                              </span>
+                            </div>
+                          </div>
+                          {s.keyPath && (
+                            <span className="text-[10px] text-amber-300 font-mono bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40 truncate max-w-[200px]" title={s.keyPath}>
+                              PPK Key
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-slate-400">
+                      Selected: <strong className="text-purple-300">{Object.values(selectedPuttyIndices).filter(Boolean).length}</strong> / {puttySessions.length}
+                    </span>
+                    <button
+                      onClick={handleImportPuttySessions}
+                      disabled={isImporting || Object.values(selectedPuttyIndices).filter(Boolean).length === 0}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold flex items-center gap-2 text-xs shadow-md cursor-pointer transition"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>{isImporting ? 'Importing Sessions...' : `Import Selected (${Object.values(selectedPuttyIndices).filter(Boolean).length})`}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {puttyImportResult && (
+                <div
+                  className={`p-3 rounded-xl border flex items-center gap-2 text-xs ${
+                    puttyImportResult.success
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                  }`}
+                >
+                  {puttyImportResult.success ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Successfully imported {puttyImportResult.count} session(s) into DgodTerm!</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{puttyImportResult.error}</span>
                     </>
                   )}
                 </div>

@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import {
   Shield,
   LifeBuoy,
@@ -21,8 +23,10 @@ import {
   Sparkles,
   MousePointer,
   RotateCcw,
+  Undo2,
   Check,
   ChevronRight,
+  ChevronDown,
   Monitor,
   Layout,
   Volume2,
@@ -36,6 +40,7 @@ import {
   KeyRound,
   Plus,
   Minus,
+  RefreshCw,
   ShieldCheck
 } from 'lucide-react';
 import { QrCanvas } from './QrCanvas';
@@ -45,6 +50,7 @@ import {
   GeneralUiSettings,
   SessionSecuritySettings,
   TERMINAL_THEMES,
+  APP_THEME_PRESETS,
   DEFAULT_TERMINAL_SETTINGS,
   DEFAULT_GENERAL_UI_SETTINGS,
   DEFAULT_SESSION_SECURITY_SETTINGS,
@@ -76,11 +82,18 @@ const RETENTION_OPTIONS: CustomSelectOption<number>[] = [
 ];
 
 const FONT_FAMILY_OPTIONS: CustomSelectOption<string>[] = [
-  { value: "'Fira Code', 'Courier New', monospace", label: 'Fira Code (Default)', description: 'Modern monospace with programming ligatures' },
-  { value: "'JetBrains Mono', monospace", label: 'JetBrains Mono', description: 'Engineered for developers with increased letter height' },
-  { value: "'Cascadia Code', monospace", label: 'Cascadia Code', description: 'Modern Microsoft terminal monospace font' },
   { value: "'Consolas', monospace", label: 'Consolas', description: 'Classic clean Windows system monospace' },
+  { value: "'JetBrains Mono', monospace", label: 'JetBrains Mono', description: 'Engineered for developers with increased letter height' },
+  { value: "'Fira Code', 'Courier New', monospace", label: 'Fira Code', description: 'Modern monospace with programming ligatures' },
+  { value: "'Cascadia Code', 'Cascadia Mono', monospace", label: 'Cascadia Code', description: 'Modern Microsoft terminal monospace font' },
+  { value: "'IBM Plex Mono', monospace", label: 'IBM Plex Mono', description: "IBM's corporate open-source monospace, high legibility" },
+  { value: "'Source Code Pro', monospace", label: 'Source Code Pro', description: "Adobe's crisp open-source developer font" },
+  { value: "'Space Mono', monospace", label: 'Space Mono', description: 'Geometric, retro-futuristic monospace by Colophon' },
+  { value: "'Inconsolata', monospace", label: 'Inconsolata', description: 'Beloved humanist monospace designed by Raph Levien' },
+  { value: "'Roboto Mono', monospace", label: 'Roboto Mono', description: "Google's geometric monospace with clean proportions" },
+  { value: "'Ubuntu Mono', monospace", label: 'Ubuntu Mono', description: 'Distinctive rounded Linux developer monospace' },
   { value: "'Courier New', monospace", label: 'Courier New', description: 'Typewriter traditional fixed-width font' },
+  { value: "'Lucida Console', monospace", label: 'Lucida Console', description: 'Classic wide Windows monospace' },
   { value: "'Menlo', monospace", label: 'Menlo', description: 'Apple macOS standard developer font' },
   { value: "'Monaco', monospace", label: 'Monaco', description: 'Compact retro macOS monospace' },
   { value: "ui-monospace, monospace", label: 'System Monospace', description: 'Native operating system monospace' },
@@ -145,8 +158,10 @@ const ACCENT_COLOR_OPTIONS: { id: GeneralUiSettings['accentColor']; name: string
 ];
 
 const APP_FONT_OPTIONS: CustomSelectOption<string>[] = [
-  { value: "'Inter', system-ui, -apple-system, sans-serif", label: 'Inter (Default)', description: 'Clean modern enterprise sans-serif' },
+  { value: "'Google Sans', 'Plus Jakarta Sans', 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, sans-serif", label: 'Google Sans', description: 'Antigravity signature geometric sans-serif' },
+  { value: "'Inter', system-ui, -apple-system, sans-serif", label: 'Inter', description: 'Clean modern enterprise sans-serif' },
   { value: "'Plus Jakarta Sans', system-ui, sans-serif", label: 'Plus Jakarta Sans', description: 'Contemporary geometric sans with warm curve details' },
+  { value: "'Outfit', system-ui, sans-serif", label: 'Outfit', description: 'Modern geometric display sans with rounded friendly aesthetics' },
   { value: "'Roboto', system-ui, sans-serif", label: 'Roboto', description: 'Google standard clean versatile sans-serif' },
   { value: "'Segoe UI', system-ui, sans-serif", label: 'Segoe UI', description: 'Native Windows fluent typography' },
   { value: "'Fira Code', monospace", label: 'Fira Code', description: 'Full monospace UI presentation' },
@@ -185,9 +200,220 @@ const CURSOR_COLORS = [
   { name: 'Pure White', hex: '#ffffff' },
 ];
 
+interface TerminalLivePreviewProps {
+  terminalSettings: TerminalSettings;
+  activeThemeObj: (typeof TERMINAL_THEMES)[string];
+  onReset: () => void;
+}
+
+const TerminalLivePreview: React.FC<TerminalLivePreviewProps> = ({
+  terminalSettings,
+  activeThemeObj,
+  onReset,
+}) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const xtermRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const lineBufferRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Synchronize CSS custom property across DOM and container
+    document.documentElement.style.setProperty('--dgod-terminal-font', terminalSettings.fontFamily);
+    containerRef.current.style.setProperty('--dgod-terminal-font', terminalSettings.fontFamily);
+
+    const term = new XTerm({
+      allowTransparency: false,
+      cursorBlink: terminalSettings.cursorBlink,
+      cursorStyle: terminalSettings.cursorStyle,
+      fontFamily: terminalSettings.fontFamily,
+      fontSize: terminalSettings.fontSize,
+      lineHeight: terminalSettings.lineHeight,
+      fontWeight: terminalSettings.fontWeight as any,
+      scrollback: 500,
+      rows: 8,
+      theme: {
+        ...activeThemeObj,
+        cursor: terminalSettings.cursorColor || activeThemeObj.cursor,
+      },
+    });
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(containerRef.current);
+
+    xtermRef.current = term;
+    fitAddonRef.current = fitAddon;
+
+    setTimeout(() => {
+      try {
+        fitAddon.fit();
+      } catch (e) {}
+    }, 25);
+
+    // Initial realistic shell simulation content
+    term.writeln(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ uname -srm`);
+    term.writeln(`\x1b[90mLinux 6.8.0-45-generic x86_64\x1b[0m`);
+    term.writeln(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ ./fleet-verify.sh --cluster production`);
+    term.writeln(`\x1b[32m[✓] 16/16 Target Nodes Verified\x1b[0m \x1b[90m—\x1b[0m \x1b[33mAudit Chain Active\x1b[0m`);
+    term.writeln(`\x1b[35m[INF] Host Key Enforcement:\x1b[0m \x1b[36mSTRICT (Ed25519)\x1b[0m`);
+    term.write(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ `);
+
+    // Interactive command handling
+    const onDataDisposable = term.onData((data) => {
+      if (data === '\r') {
+        const cmd = lineBufferRef.current.trim();
+        lineBufferRef.current = '';
+        term.write('\r\n');
+
+        if (cmd === 'uptime') {
+          term.writeln(` 09:43:00 up 142 days, 18:22,  2 users,  load average: 0.12, 0.08, 0.05`);
+        } else if (cmd === 'uname' || cmd.startsWith('uname ')) {
+          term.writeln(`Linux prod-gateway 6.8.0-45-generic x86_64 GNU/Linux`);
+        } else if (cmd === 'whoami') {
+          term.writeln(`dgod (SecOps Lead / Superuser)`);
+        } else if (cmd === 'ls' || cmd.startsWith('ls ')) {
+          term.writeln(`\x1b[1;32mfleet-verify.sh\x1b[0m  \x1b[1;34mansible-playbooks/\x1b[0m  inventory.ini  \x1b[33mid_ed25519\x1b[0m`);
+        } else if (cmd === 'font') {
+          term.writeln(`Active Font: ${terminalSettings.fontFamily} (${terminalSettings.fontSize}px)`);
+        } else if (cmd === 'date') {
+          term.writeln(new Date().toUTCString());
+        } else if (cmd === 'clear') {
+          term.clear();
+        } else if (cmd === 'help') {
+          term.writeln(`Interactive Preview Shell. Commands: uptime, uname, whoami, ls, font, date, clear, echo, help`);
+        } else if (cmd.startsWith('echo ')) {
+          term.writeln(cmd.slice(5));
+        } else if (cmd.length > 0) {
+          term.writeln(`bash: ${cmd.split(' ')[0]}: command not found`);
+        }
+
+        term.write(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ `);
+      } else if (data === '\x7f' || data === '\b') {
+        if (lineBufferRef.current.length > 0) {
+          lineBufferRef.current = lineBufferRef.current.slice(0, -1);
+          term.write('\b \b');
+        }
+      } else if (data === '\x03') {
+        term.write('^C\r\n');
+        lineBufferRef.current = '';
+        term.write(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ `);
+      } else if (data === '\x0c') {
+        term.clear();
+        term.write(`\x1b[36mdgod@prod-gateway\x1b[0m:\x1b[34m~\x1b[0m$ ${lineBufferRef.current}`);
+      } else if (data >= ' ') {
+        lineBufferRef.current += data;
+        term.write(data);
+      }
+    });
+
+    const ro = new ResizeObserver(() => {
+      try {
+        fitAddon.fit();
+      } catch (e) {}
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      onDataDisposable.dispose();
+      try {
+        term.dispose();
+      } catch (e) {}
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, []);
+
+  // Dynamically update XTerm options and CSS properties on state changes
+  useEffect(() => {
+    if (!xtermRef.current || !containerRef.current) return;
+    const term = xtermRef.current;
+
+    document.documentElement.style.setProperty('--dgod-terminal-font', terminalSettings.fontFamily);
+    containerRef.current.style.setProperty('--dgod-terminal-font', terminalSettings.fontFamily);
+
+    term.options.fontFamily = terminalSettings.fontFamily;
+    term.options.fontSize = terminalSettings.fontSize;
+    term.options.lineHeight = terminalSettings.lineHeight;
+    term.options.fontWeight = terminalSettings.fontWeight as any;
+    term.options.cursorStyle = terminalSettings.cursorStyle;
+    term.options.cursorBlink = terminalSettings.cursorBlink;
+    term.options.theme = {
+      ...activeThemeObj,
+      cursor: terminalSettings.cursorColor || activeThemeObj.cursor,
+    };
+
+    if (fitAddonRef.current) {
+      try {
+        fitAddonRef.current.fit();
+      } catch (e) {}
+    }
+    try {
+      (term as any).refresh?.(0, term.rows - 1);
+    } catch (e) {}
+  }, [terminalSettings, activeThemeObj]);
+
+  return (
+    <div className="bg-slate-900/90 border border-sky-500/40 rounded-xl p-4 shadow-xl space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Monitor className="w-4 h-4 text-sky-400" />
+          <span className="text-xs font-bold uppercase tracking-wider text-white">
+            Live Terminal Preview
+          </span>
+          <span className="text-[11px] text-slate-400 font-mono">
+            ({activeThemeObj.name} • {terminalSettings.fontSize}px • {terminalSettings.fontFamily.split(',')[0].replace(/'/g, '')})
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3 text-slate-400" />
+            Reset Terminal Defaults
+          </button>
+        </div>
+      </div>
+
+      <div
+        className="rounded-lg border border-slate-700/80 shadow-2xl overflow-hidden transition-all duration-200 cursor-text"
+        onClick={() => xtermRef.current?.focus()}
+        style={{
+          backgroundColor: activeThemeObj.background,
+          padding: `${terminalSettings.windowPadding}px`,
+        }}
+      >
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 opacity-70 text-[11px] select-none">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
+            <span className="ml-2 font-mono text-[10px] text-slate-300">dgod@enterprise-fleet-01:~</span>
+          </div>
+          <span className="text-[10px] text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 font-mono">
+            Interactive Shell — Type commands & test fonts
+          </span>
+        </div>
+
+        <div
+          ref={containerRef}
+          className="w-full h-44 overflow-hidden"
+          style={{
+            fontFamily: terminalSettings.fontFamily,
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
 export const SettingsView: React.FC = () => {
   // Navigation Section Tab
-  const [activeTab, setActiveTab] = useState<'terminal' | 'ui' | 'session' | 'policy'>('terminal');
+  const [activeTab, setActiveTab] = useState<'terminal' | 'ui' | 'session' | 'policy'>('ui');
 
   // Terminal Settings
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
@@ -207,6 +433,16 @@ export const SettingsView: React.FC = () => {
   const [screenLockTimeoutMinutes, setScreenLockTimeoutMinutes] = useState(15);
   const [customTimeoutInput, setCustomTimeoutInput] = useState('15');
   const [lockOnOsLock, setLockOnOsLock] = useState(true);
+
+  useEffect(() => {
+    const handleSwitch = (e: any) => {
+      if (e.detail && ['terminal', 'ui', 'session', 'policy'].includes(e.detail)) {
+        setActiveTab(e.detail);
+      }
+    };
+    window.addEventListener('dgodterm:switch-settings-tab', handleSwitch);
+    return () => window.removeEventListener('dgodterm:switch-settings-tab', handleSwitch);
+  }, []);
   const [passwordRetentionMinutes, setPasswordRetentionMinutes] = useState(-1);
   const [keepTabsAliveInBackground, setKeepTabsAliveInBackground] = useState(true);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -222,9 +458,37 @@ export const SettingsView: React.FC = () => {
   const [mfaSuccess, setMfaSuccess] = useState('');
   const [copiedMfaSecret, setCopiedMfaSecret] = useState(false);
 
+  // MobaXterm X11 Display Server States
+  const [x11Status, setX11Status] = useState<{ isRunning: boolean; port: number; display: string; detectedServers: any[] } | null>(null);
+  const [isCheckingX11, setIsCheckingX11] = useState(false);
+  const [x11Message, setX11Message] = useState('');
+
+  const checkX11Status = async () => {
+    setIsCheckingX11(true);
+    try {
+      const status = await (window as any).dgodterm?.getX11Status?.();
+      if (status) setX11Status(status);
+    } catch {}
+    finally {
+      setIsCheckingX11(false);
+    }
+  };
+
+  const handleLaunchX11 = async () => {
+    setX11Message('Launching X11 server...');
+    try {
+      const res = await (window as any).dgodterm?.launchX11Server?.();
+      setX11Message(res?.message || 'X11 Server launched');
+      await checkX11Status();
+    } catch (e: any) {
+      setX11Message(e.message || 'Failed to launch X11 server');
+    }
+  };
+
   useEffect(() => {
     loadPolicyAndAgent();
     loadMfaStatus();
+    checkX11Status();
     try {
       const sessionSec = getSessionSecuritySettings();
       setAutoLockoutEnabled(sessionSec.autoLockoutEnabled);
@@ -315,6 +579,9 @@ export const SettingsView: React.FC = () => {
     const updated = { ...terminalSettings, [key]: value };
     setTerminalSettings(updated);
     saveTerminalSettings(updated);
+    if (key === 'fontFamily') {
+      document.documentElement.style.setProperty('--dgod-terminal-font', value as string);
+    }
     showSavedNotification();
   };
 
@@ -322,6 +589,75 @@ export const SettingsView: React.FC = () => {
     const updated = { ...uiSettings, [key]: value };
     setUiSettings(updated);
     saveGeneralUiSettings(updated);
+    showSavedNotification();
+  };
+
+  const handleSelectThemePreset = (presetId: string) => {
+    const preset = APP_THEME_PRESETS[presetId];
+    if (!preset) return;
+    const updated: GeneralUiSettings = {
+      ...uiSettings,
+      themePreset: preset.id,
+      themeMode: preset.mode,
+      appTheme: preset.mode === 'light' ? 'light' : 'windows11',
+      customBackground: preset.background,
+      customForeground: preset.foreground,
+      customAccent: preset.accent
+    };
+    setUiSettings(updated);
+    saveGeneralUiSettings(updated);
+    if (preset.terminalThemeId && TERMINAL_THEMES[preset.terminalThemeId]) {
+      const nextTerm = {
+        ...terminalSettings,
+        themeId: preset.terminalThemeId,
+        cursorColor: preset.accent
+      };
+      setTerminalSettings(nextTerm);
+      saveTerminalSettings(nextTerm);
+    }
+    showSavedNotification();
+  };
+
+  const handleResetThemePreset = () => {
+    const currentPresetId = uiSettings.themePreset || 'gruvbox-material';
+    handleSelectThemePreset(currentPresetId);
+  };
+
+  const handleThemeModeChange = (mode: 'system' | 'light' | 'dark') => {
+    const isLight =
+      mode === 'light' ||
+      (mode === 'system' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches);
+    const currentPreset = APP_THEME_PRESETS[uiSettings.themePreset || 'gruvbox-material'];
+    let nextPreset = currentPreset;
+    if (isLight && currentPreset?.mode === 'dark') {
+      nextPreset = APP_THEME_PRESETS['gruvbox-light'];
+    } else if (!isLight && currentPreset?.mode === 'light') {
+      nextPreset = APP_THEME_PRESETS['gruvbox-material'];
+    }
+    const updated: GeneralUiSettings = {
+      ...uiSettings,
+      themeMode: mode,
+      appTheme: isLight ? 'light' : 'windows11',
+      ...(nextPreset && nextPreset.id !== currentPreset?.id
+        ? {
+            themePreset: nextPreset.id,
+            customBackground: nextPreset.background,
+            customForeground: nextPreset.foreground,
+            customAccent: nextPreset.accent
+          }
+        : {})
+    };
+    setUiSettings(updated);
+    saveGeneralUiSettings(updated);
+    if (nextPreset?.terminalThemeId && TERMINAL_THEMES[nextPreset.terminalThemeId]) {
+      const nextTerm = {
+        ...terminalSettings,
+        themeId: nextPreset.terminalThemeId,
+        cursorColor: nextPreset.accent
+      };
+      setTerminalSettings(nextTerm);
+      saveTerminalSettings(nextTerm);
+    }
     showSavedNotification();
   };
 
@@ -368,6 +704,7 @@ export const SettingsView: React.FC = () => {
   const handleResetTerminalDefaults = () => {
     setTerminalSettings(DEFAULT_TERMINAL_SETTINGS);
     saveTerminalSettings(DEFAULT_TERMINAL_SETTINGS);
+    document.documentElement.style.setProperty('--dgod-terminal-font', DEFAULT_TERMINAL_SETTINGS.fontFamily);
     showSavedNotification();
   };
 
@@ -446,34 +783,34 @@ export const SettingsView: React.FC = () => {
       {/* Navigation Tabs Pill Bar */}
       <div className="px-6 py-2.5 bg-slate-950/80 border-b border-slate-800 flex items-center gap-2 shrink-0 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('terminal')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-            activeTab === 'terminal'
-              ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-          }`}
-        >
-          <Terminal className="w-3.5 h-3.5" />
-          <span>Terminal Appearance</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('ui')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
             activeTab === 'ui'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
           <Palette className="w-3.5 h-3.5" />
-          <span>General User Interface</span>
+          <span>Appearance</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('terminal')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
+            activeTab === 'terminal'
+              ? 'bg-sky-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <Terminal className="w-3.5 h-3.5" />
+          <span>Terminal Emulator</span>
         </button>
 
         <button
           onClick={() => setActiveTab('session')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
             activeTab === 'session'
-              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
@@ -483,9 +820,9 @@ export const SettingsView: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('policy')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
             activeTab === 'policy'
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
@@ -502,122 +839,11 @@ export const SettingsView: React.FC = () => {
         {activeTab === 'terminal' && (
           <div className="space-y-6">
             {/* Live Interactive Terminal Preview */}
-            <div className="bg-slate-900/90 border border-sky-500/40 rounded-xl p-4 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Monitor className="w-4 h-4 text-sky-400" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    Live Terminal Preview
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    ({activeThemeObj.name} • {terminalSettings.fontSize}px • {terminalSettings.fontFamily.split(',')[0].replace(/'/g, '')})
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleResetTerminalDefaults}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
-                  >
-                    <RotateCcw className="w-3 h-3 text-slate-400" />
-                    Reset Terminal Defaults
-                  </button>
-                </div>
-              </div>
-
-              {/* Terminal Box Canvas Mockup */}
-              <div
-                className="rounded-lg border border-slate-700/80 shadow-2xl overflow-hidden transition-all duration-200 font-mono"
-                style={{
-                  backgroundColor: activeThemeObj.background,
-                  color: activeThemeObj.foreground,
-                  fontFamily: terminalSettings.fontFamily,
-                  fontSize: `${terminalSettings.fontSize}px`,
-                  lineHeight: terminalSettings.lineHeight,
-                  fontWeight: terminalSettings.fontWeight,
-                  padding: `${terminalSettings.windowPadding}px`,
-                }}
-              >
-                <div className="flex items-center gap-2 pb-2 mb-2 border-b border-white/10 opacity-60 text-[11px] select-none">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
-                  <span className="ml-2 font-mono text-[10px]">dgod@enterprise-fleet-01:~</span>
-                </div>
-
-                <div className="space-y-1 select-none">
-                  <div>
-                    <span style={{ color: activeThemeObj.cyan }}>dgod@prod-gateway</span>
-                    <span style={{ color: activeThemeObj.foreground }}>:</span>
-                    <span style={{ color: activeThemeObj.blue }}>~</span>
-                    <span style={{ color: activeThemeObj.foreground }}>$ </span>
-                    <span>uname -srm</span>
-                  </div>
-                  <div style={{ color: activeThemeObj.brightBlack }}>
-                    Linux 6.8.0-45-generic x86_64
-                  </div>
-
-                  <div>
-                    <span style={{ color: activeThemeObj.cyan }}>dgod@prod-gateway</span>
-                    <span style={{ color: activeThemeObj.foreground }}>:</span>
-                    <span style={{ color: activeThemeObj.blue }}>~</span>
-                    <span style={{ color: activeThemeObj.foreground }}>$ </span>
-                    <span>./fleet-verify.sh --cluster production</span>
-                  </div>
-                  <div>
-                    <span style={{ color: activeThemeObj.green }}>[✓] 16/16 Target Nodes Verified</span>
-                    <span style={{ color: activeThemeObj.brightBlack }}> — </span>
-                    <span style={{ color: activeThemeObj.yellow }}>Audit Chain Active</span>
-                  </div>
-                  <div>
-                    <span style={{ color: activeThemeObj.magenta }}>[INF] Host Key Enforcement:</span>
-                    <span style={{ color: activeThemeObj.cyan }}> STRICT (Ed25519)</span>
-                  </div>
-
-                  <div className="flex items-center pt-1">
-                    <span style={{ color: activeThemeObj.cyan }}>dgod@prod-gateway</span>
-                    <span style={{ color: activeThemeObj.foreground }}>:</span>
-                    <span style={{ color: activeThemeObj.blue }}>~</span>
-                    <span style={{ color: activeThemeObj.foreground }}>$ </span>
-                    <span>uptime</span>
-                    {/* Simulated Cursor */}
-                    {terminalSettings.cursorStyle === 'block' && (
-                      <span
-                        className={`inline-block ml-0.5 ${terminalSettings.cursorBlink ? 'animate-pulse' : ''}`}
-                        style={{
-                          backgroundColor: terminalSettings.cursorColor || activeThemeObj.cursor,
-                          width: '0.6em',
-                          height: '1.15em',
-                          verticalAlign: 'text-bottom'
-                        }}
-                      />
-                    )}
-                    {terminalSettings.cursorStyle === 'underline' && (
-                      <span
-                        className={`inline-block ml-0.5 border-b-2 ${terminalSettings.cursorBlink ? 'animate-pulse' : ''}`}
-                        style={{
-                          borderColor: terminalSettings.cursorColor || activeThemeObj.cursor,
-                          width: '0.6em',
-                          height: '1.15em',
-                          verticalAlign: 'text-bottom'
-                        }}
-                      />
-                    )}
-                    {terminalSettings.cursorStyle === 'bar' && (
-                      <span
-                        className={`inline-block ml-0.5 ${terminalSettings.cursorBlink ? 'animate-pulse' : ''}`}
-                        style={{
-                          backgroundColor: terminalSettings.cursorColor || activeThemeObj.cursor,
-                          width: '2px',
-                          height: '1.15em',
-                          verticalAlign: 'text-bottom'
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <TerminalLivePreview
+              terminalSettings={terminalSettings}
+              activeThemeObj={activeThemeObj}
+              onReset={handleResetTerminalDefaults}
+            />
 
             {/* Terminal Typography & Font Settings */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 space-y-4">
@@ -693,6 +919,30 @@ export const SettingsView: React.FC = () => {
                     onChange={(val) => handleUpdateTerminalSetting('lineHeight', Number(val))}
                     options={LINE_HEIGHT_OPTIONS}
                   />
+                </div>
+              </div>
+
+              {/* Live Terminal Typography Preview Strip */}
+              <div
+                className="mt-3 p-4 rounded-xl border border-slate-800/90 bg-black/90 flex flex-col gap-2.5 transition-all shadow-inner"
+                style={{
+                  fontFamily: terminalSettings.fontFamily,
+                  fontSize: `${terminalSettings.fontSize}px`,
+                  lineHeight: terminalSettings.lineHeight,
+                  fontWeight: terminalSettings.fontWeight === 'bold' ? 700 : (terminalSettings.fontWeight === '600' ? 600 : (terminalSettings.fontWeight === '500' ? 500 : 400))
+                }}
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 text-[11px] font-sans text-slate-400">
+                  <span className="font-semibold text-sky-400">Live Terminal Typography Preview</span>
+                  <span className="text-[10px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                    {terminalSettings.fontFamily.replace(/['"]/g, '')} • {terminalSettings.fontSize}px
+                  </span>
+                </div>
+                <div style={{ fontFamily: terminalSettings.fontFamily }} className="text-emerald-400 whitespace-nowrap overflow-hidden text-ellipsis">
+                  user@dgodterm:~$ echo "Active Font Family: ${terminalSettings.fontFamily.replace(/['"]/g, '')}"
+                </div>
+                <div style={{ fontFamily: terminalSettings.fontFamily }} className="text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                  0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz ()[]{}!@#$%^&*-+=
                 </div>
               </div>
             </div>
@@ -891,125 +1141,260 @@ export const SettingsView: React.FC = () => {
         {/* TAB 2: GENERAL USER INTERFACE                            */}
         {/* ======================================================== */}
         {activeTab === 'ui' && (
-          <div className="space-y-6">
-            {/* Theme Mode: Midnight Obsidian vs Dark Gray / Slate */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Palette className="w-4 h-4 text-sky-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Application Appearance & Theme Mode
-                  </h3>
-                </div>
-                <button
-                  onClick={handleResetUiDefaults}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
-                >
-                  <RotateCcw className="w-3 h-3 text-slate-400" />
-                  Reset UI Defaults
-                </button>
+          <div className="max-w-4xl space-y-7 pb-6">
+            {/* ======================================================== */}
+            {/* ANTIGRAVITY APPEARANCE & THEME ENGINE                    */}
+            {/* ======================================================== */}
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-[22px] font-medium tracking-tight" style={{ color: 'var(--dgod-text-primary)' }}>
+                  Appearance
+                </h2>
+                <p className="text-[13.5px] mt-1" style={{ color: 'var(--dgod-text-secondary)' }}>
+                  Configure the agent&apos;s visual theme and display preferences.
+                </p>
               </div>
 
-              <p className="text-xs text-slate-400">
-                Choose your application workspace atmosphere. Switch between deep pitch-black midnight obsidian or a softer, glare-free dark-gray slate palette.
-              </p>
-
-              <div className="grid grid-cols-2 gap-4 pt-1">
-                {/* Dark (Midnight Obsidian) */}
-                <button
-                  onClick={() => handleUpdateUiSetting('appTheme', 'dark')}
-                  className={`p-4 rounded-xl border text-left transition flex items-start gap-3.5 cursor-pointer ${
-                    (uiSettings.appTheme || 'dark') === 'dark'
-                      ? 'border-sky-500 bg-slate-950 ring-2 ring-sky-500/30 shadow-lg'
-                      : 'border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-950'
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-lg bg-[#090d16] border border-slate-800 flex items-center justify-center shrink-0">
-                    <Moon className="w-5 h-5 text-sky-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-white">Midnight Obsidian (Dark)</span>
-                      {(uiSettings.appTheme || 'dark') === 'dark' && (
-                        <span className="text-[10px] uppercase font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
-                          Active
-                        </span>
-                      )}
+              {/* Section 1: Chat / Conversation Steps */}
+              <div>
+                <div className="agy-section-title">Chat</div>
+                <div className="agy-card">
+                  <div className="agy-row">
+                    <div>
+                      <div className="agy-row-label">Conversation Steps</div>
+                      <div className="agy-row-sublabel">
+                        Choose how much detail is shown during a conversation and session activity log.
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Deep obsidian background with pitch-black contrast (#090d16 / #020617). Maximum OLED depth.
-                    </p>
-                  </div>
-                </button>
-
-                {/* Light Mode (Soft Dark Gray / Slate - Glare-Free) */}
-                <button
-                  onClick={() => handleUpdateUiSetting('appTheme', 'light')}
-                  className={`p-4 rounded-xl border text-left transition flex items-start gap-3.5 cursor-pointer ${
-                    uiSettings.appTheme === 'light'
-                      ? 'border-amber-500 bg-zinc-800/80 ring-2 ring-amber-500/30 shadow-lg'
-                      : 'border-slate-800 bg-zinc-900/50 hover:border-slate-700 hover:bg-zinc-900'
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-lg bg-[#27272a] border border-zinc-700 flex items-center justify-center shrink-0">
-                    <Sun className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-white">Dark Gray / Soft Slate (Light Mode)</span>
-                      {uiSettings.appTheme === 'light' && (
-                        <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Smooth dark gray & zinc slate workspace (#1e1e24 / #27272a). Easy on the eyes, avoiding harsh white glare while noticeably brighter.
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* UI Accent Color Palette */}
-            <div className="bg-slate-900/80 border border-purple-500/40 rounded-xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Interface Theme Accent Color
-                  </h3>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-400">
-                Select your primary workspace accent color. Used for active tabs, status chips, focus highlights, and primary actions.
-              </p>
-
-              <div className="grid grid-cols-6 gap-3 pt-1">
-                {ACCENT_COLOR_OPTIONS.map((accent) => {
-                  const isSelected = uiSettings.accentColor === accent.id;
-                  return (
-                    <button
-                      key={accent.id}
-                      onClick={() => handleUpdateUiSetting('accentColor', accent.id)}
-                      className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-2 transition cursor-pointer ${
-                        isSelected
-                          ? `border-white/50 bg-slate-800/90 shadow-xl ring-2 ${accent.ringClass}`
-                          : 'border-slate-800 bg-slate-950/60 hover:bg-slate-900 hover:border-slate-700'
-                      }`}
-                    >
-                      <span
-                        className={`w-6 h-6 rounded-full shadow-lg ${accent.bgClass} flex items-center justify-center`}
+                    <div className="agy-pill-group">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateUiSetting('conversationSteps', 'default')}
+                        className={`agy-pill-btn ${(uiSettings.conversationSteps || 'default') === 'default' ? 'active' : ''}`}
                       >
-                        {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                        Default
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateUiSetting('conversationSteps', 'verbose')}
+                        className={`agy-pill-btn ${uiSettings.conversationSteps === 'verbose' ? 'active' : ''}`}
+                      >
+                        Verbose
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Appearance (Theme, Contrast, Font) */}
+              <div>
+                <div className="agy-section-title">Appearance</div>
+                <div className="agy-card">
+                  {/* Row 1: Theme (System | Light | Dark) */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Theme</div>
+                    <div className="agy-pill-group">
+                      <button
+                        type="button"
+                        title="System Theme"
+                        onClick={() => handleThemeModeChange('system')}
+                        className={`agy-pill-btn !px-3.5 ${uiSettings.themeMode === 'system' ? 'active' : ''}`}
+                      >
+                        <Monitor className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Light Theme"
+                        onClick={() => handleThemeModeChange('light')}
+                        className={`agy-pill-btn !px-3.5 ${uiSettings.themeMode === 'light' ? 'active' : ''}`}
+                      >
+                        <Sun className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Dark Theme"
+                        onClick={() => handleThemeModeChange('dark')}
+                        className={`agy-pill-btn !px-3.5 ${(uiSettings.themeMode || 'dark') === 'dark' ? 'active' : ''}`}
+                      >
+                        <Moon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Contrast (Default | Strong) */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Contrast</div>
+                    <div className="agy-pill-group">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateUiSetting('contrast', 'default')}
+                        className={`agy-pill-btn ${uiSettings.contrast === 'default' ? 'active' : ''}`}
+                      >
+                        Default
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateUiSetting('contrast', 'strong')}
+                        className={`agy-pill-btn ${(uiSettings.contrast || 'strong') === 'strong' ? 'active' : ''}`}
+                      >
+                        Strong
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Font */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Font</div>
+                    <div className="relative inline-flex items-center">
+                      <select
+                        value={uiSettings.appFontFamily || APP_FONT_OPTIONS[0].value}
+                        onChange={(e) => handleUpdateUiSetting('appFontFamily', e.target.value)}
+                        className="agy-select-pill"
+                      >
+                        {APP_FONT_OPTIONS.map((opt) => (
+                          <option key={opt.label} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        className="w-3.5 h-3.5 pointer-events-none absolute right-3.5"
+                        style={{ color: 'var(--dgod-text-secondary)' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Dark Theme / Light Theme Customization Card */}
+              <div>
+                <div className="agy-section-title">
+                  {uiSettings.themeMode === 'light' ? 'Light Theme' : 'Dark Theme'}
+                </div>
+                <div className="agy-card">
+                  {/* Row 1: Preset */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Preset</div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleResetThemePreset}
+                        title="Reset colors to preset defaults"
+                        className="p-1.5 rounded-full hover:bg-white/5 transition cursor-pointer"
+                        style={{ color: 'var(--dgod-text-secondary)' }}
+                      >
+                        <Undo2 className="w-4 h-4" />
+                      </button>
+                      <div className="relative inline-flex items-center">
+                        <select
+                          value={uiSettings.themePreset || 'gruvbox-material'}
+                          onChange={(e) => handleSelectThemePreset(e.target.value)}
+                          className="agy-select-pill"
+                        >
+                          {Object.values(APP_THEME_PRESETS).map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          className="w-3.5 h-3.5 pointer-events-none absolute right-3.5"
+                          style={{ color: 'var(--dgod-text-secondary)' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Background */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Background</div>
+                    <label className="agy-color-pill">
+                      <span
+                        className="w-4 h-4 rounded-[4px] border border-white/15 shrink-0 relative overflow-hidden"
+                        style={{ backgroundColor: uiSettings.customBackground || '#2D2F30' }}
+                      >
+                        <input
+                          type="color"
+                          value={uiSettings.customBackground || '#2D2F30'}
+                          onChange={(e) => handleUpdateUiSetting('customBackground', e.target.value.toUpperCase())}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
                       </span>
-                      <span className="text-[11px] font-semibold text-slate-200 text-center">
-                        {accent.name.split(' ')[0]}
+                      <span className="text-xs font-mono" style={{ color: 'var(--dgod-text-secondary)' }}>#</span>
+                      <input
+                        type="text"
+                        maxLength={7}
+                        value={(uiSettings.customBackground || '#2D2F30').replace('#', '')}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+                          handleUpdateUiSetting('customBackground', `#${raw}`);
+                        }}
+                        className="w-[62px] bg-transparent font-mono text-[13px] focus:outline-none uppercase"
+                        style={{ color: 'var(--dgod-text-primary)' }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Row 3: Foreground */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Foreground</div>
+                    <label className="agy-color-pill">
+                      <span
+                        className="w-4 h-4 rounded-[4px] border border-white/15 shrink-0 relative overflow-hidden"
+                        style={{ backgroundColor: uiSettings.customForeground || '#D4BE98' }}
+                      >
+                        <input
+                          type="color"
+                          value={uiSettings.customForeground || '#D4BE98'}
+                          onChange={(e) => handleUpdateUiSetting('customForeground', e.target.value.toUpperCase())}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
                       </span>
-                    </button>
-                  );
-                })}
+                      <span className="text-xs font-mono" style={{ color: 'var(--dgod-text-secondary)' }}>#</span>
+                      <input
+                        type="text"
+                        maxLength={7}
+                        value={(uiSettings.customForeground || '#D4BE98').replace('#', '')}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+                          handleUpdateUiSetting('customForeground', `#${raw}`);
+                        }}
+                        className="w-[62px] bg-transparent font-mono text-[13px] focus:outline-none uppercase"
+                        style={{ color: 'var(--dgod-text-primary)' }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Row 4: Accent */}
+                  <div className="agy-row">
+                    <div className="agy-row-label">Accent</div>
+                    <label className="agy-color-pill">
+                      <span
+                        className="w-4 h-4 rounded-[4px] border border-white/15 shrink-0 relative overflow-hidden"
+                        style={{ backgroundColor: uiSettings.customAccent || '#E78A4E' }}
+                      >
+                        <input
+                          type="color"
+                          value={uiSettings.customAccent || '#E78A4E'}
+                          onChange={(e) => handleUpdateUiSetting('customAccent', e.target.value.toUpperCase())}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                      </span>
+                      <span className="text-xs font-mono" style={{ color: 'var(--dgod-text-secondary)' }}>#</span>
+                      <input
+                        type="text"
+                        maxLength={7}
+                        value={(uiSettings.customAccent || '#E78A4E').replace('#', '')}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+                          handleUpdateUiSetting('customAccent', `#${raw}`);
+                        }}
+                        className="w-[62px] bg-transparent font-mono text-[13px] focus:outline-none uppercase"
+                        style={{ color: 'var(--dgod-text-primary)' }}
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1226,6 +1611,96 @@ export const SettingsView: React.FC = () => {
                     className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-500 focus:ring-0 mt-0.5 cursor-pointer"
                   />
                 </label>
+              </div>
+            </div>
+
+            {/* MobaXterm X11 Forwarding & Display Server Manager */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Monitor className="w-4 h-4 text-purple-400" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    X11 Display Server &amp; Linux GUI Forwarding
+                  </h3>
+                  <span className="text-[10px] bg-purple-500/20 text-purple-300 font-mono px-2 py-0.5 rounded border border-purple-500/40 font-bold">
+                    MobaXterm Mode
+                  </span>
+                </div>
+                <button
+                  onClick={checkX11Status}
+                  disabled={isCheckingX11}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 text-purple-400 ${isCheckingX11 ? 'animate-spin' : ''}`} />
+                  <span>Check Status</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Like MobaXterm, DgodTerm supports integrated SSH X11 channel forwarding. When X11 forwarding is enabled on a Linux host profile, remote graphical applications (e.g. <code className="text-purple-300 font-mono text-[11px]">xeyes</code>, <code className="text-purple-300 font-mono text-[11px]">gedit</code>, <code className="text-purple-300 font-mono text-[11px]">virt-manager</code>, <code className="text-purple-300 font-mono text-[11px]">wireshark</code>) automatically project as floating native windows on your Windows desktop via <code className="text-purple-300 font-mono text-[11px]">127.0.0.1:6000 (:0.0)</code>.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Live Status Card */}
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">Local X11 Server Status</span>
+                    {x11Status?.isRunning ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>ACTIVE (PORT 6000)</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span>STANDBY / STOPPED</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Target Display: <strong className="text-slate-200 font-mono">127.0.0.1:0.0</strong>
+                  </div>
+                  {!x11Status?.isRunning && (
+                    <button
+                      onClick={handleLaunchX11}
+                      className="mt-2 w-full py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Launch Local X11 Server</span>
+                    </button>
+                  )}
+                  {x11Message && (
+                    <div className="text-[11px] text-purple-300 font-mono mt-1 pt-1 border-t border-slate-800">
+                      {x11Message}
+                    </div>
+                  )}
+                </div>
+
+                {/* Detected Engines Card */}
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                  <span className="text-xs font-semibold text-slate-300 block">Detected Local X Servers</span>
+                  <div className="space-y-1 text-xs">
+                    {(x11Status?.detectedServers || []).length > 0 ? (
+                      x11Status?.detectedServers.map((s: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-300">{s.name}</span>
+                          {s.exists ? (
+                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Installed</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">Not detected</span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-[11px] text-slate-500">
+                        Compatible with VcXsrv, Xming, Cygwin/X, and X410 Windows X servers.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

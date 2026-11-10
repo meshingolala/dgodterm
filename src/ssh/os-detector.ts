@@ -121,6 +121,10 @@ export function parseOsReleaseOutput(rawText: string): DetectedOsInfo | null {
   else if (allLower.includes('darwin')) {
     flavor = 'darwin';
   }
+  // 21. Cisco IOS / IOS-XE / NX-OS
+  else if (allLower.includes('cisco') || allLower.includes('ios-xe') || allLower.includes('nx-os')) {
+    flavor = 'cisco';
+  }
   // Fallback check on Linux
   else if (allLower.includes('linux')) {
     flavor = 'linux';

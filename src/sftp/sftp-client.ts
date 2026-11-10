@@ -7,6 +7,7 @@ import { ConnectionProfile, SFTPItem, LocalDirectoryResult } from '../domain/typ
 import { CredentialBroker } from '../credential/credential-broker';
 import { AuditService } from '../audit/audit-service';
 import { TrustStore } from '../ssh/trust-store';
+import { getSupportedSshAlgorithms } from '../ssh/ssh-client';
 import { dbOperations } from '../storage/db';
 
 export class SFTPManager {
@@ -47,6 +48,7 @@ export class SFTPManager {
         username: profile.username,
         readyTimeout: 15000,
         tryKeyboard: true,
+        algorithms: getSupportedSshAlgorithms(),
         hostVerifier: (keyBuffer: Buffer, cb: (accept: boolean) => void) => {
           const keyType = profile.hostname.includes('ed25519') ? 'ssh-ed25519' : 'ssh-rsa';
           const verifyRes = TrustStore.getInstance().verifyHostKey(
@@ -111,6 +113,7 @@ export class SFTPManager {
             username: jumpProfile.username,
             readyTimeout: 15000,
             tryKeyboard: true,
+            algorithms: getSupportedSshAlgorithms(),
             hostVerifier: (_k: Buffer, cb: (acc: boolean) => void) => cb(true)
           };
           if (jumpCred.authType === 'agent' && jumpCred.agentSock) jumpConfig.agent = jumpCred.agentSock;

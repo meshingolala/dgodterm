@@ -12,6 +12,7 @@ export interface HostSystemResources {
 }
 
 let lastCpuMeasure: { idle: number; total: number } | null = null;
+let cachedDiskMetrics: { diskTotalGB: number; diskUsedGB: number; diskPercent: number; updatedAt: number } | null = null;
 
 export function getHostSystemResources(): HostSystemResources {
   const totalMem = os.totalmem();
@@ -44,20 +45,24 @@ export function getHostSystemResources(): HostSystemResources {
   }
   lastCpuMeasure = { idle, total };
 
-  let diskTotalGB = 0;
-  let diskUsedGB = 0;
-  let diskPercent = 0;
-  try {
-    const root = process.platform === 'win32' ? process.cwd().slice(0, 3) : '/';
-    const stat = fs.statfsSync(root);
-    const totalBytes = stat.blocks * stat.bsize;
-    const freeBytes = stat.bavail * stat.bsize;
-    const usedBytes = Math.max(0, totalBytes - freeBytes);
-    diskTotalGB = parseFloat((totalBytes / (1024 ** 3)).toFixed(1));
-    diskUsedGB = parseFloat((usedBytes / (1024 ** 3)).toFixed(1));
-    diskPercent = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
-  } catch {
-    // fallback if drive root is inaccessible
+  const now = Date.now();
+  if (!cachedDiskMetrics || now - cachedDiskMetrics.updatedAt > 30000) {
+    let diskTotalGB = cachedDiskMetrics?.diskTotalGB ?? 0;
+    let diskUsedGB = cachedDiskMetrics?.diskUsedGB ?? 0;
+    let diskPercent = cachedDiskMetrics?.diskPercent ?? 0;
+    try {
+      const root = process.platform === 'win32' ? process.cwd().slice(0, 3) : '/';
+      const stat = fs.statfsSync(root);
+      const totalBytes = stat.blocks * stat.bsize;
+      const freeBytes = stat.bavail * stat.bsize;
+      const usedBytes = Math.max(0, totalBytes - freeBytes);
+      diskTotalGB = parseFloat((totalBytes / (1024 ** 3)).toFixed(1));
+      diskUsedGB = parseFloat((usedBytes / (1024 ** 3)).toFixed(1));
+      diskPercent = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
+    } catch {
+      // fallback if drive root is inaccessible
+    }
+    cachedDiskMetrics = { diskTotalGB, diskUsedGB, diskPercent, updatedAt: now };
   }
 
   return {
@@ -65,8 +70,8 @@ export function getHostSystemResources(): HostSystemResources {
     ramUsedGB,
     ramTotalGB,
     ramPercent,
-    diskUsedGB,
-    diskTotalGB,
-    diskPercent
+    diskUsedGB: cachedDiskMetrics.diskUsedGB,
+    diskTotalGB: cachedDiskMetrics.diskTotalGB,
+    diskPercent: cachedDiskMetrics.diskPercent
   };
 }

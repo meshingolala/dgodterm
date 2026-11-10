@@ -24,10 +24,14 @@ import { BatchPushModal } from './components/BatchPushModal';
 import { KeyDeployModal } from './components/KeyDeployModal';
 import { UptimeMonitorPanel } from './components/UptimeMonitorPanel';
 import { CloudImportModal } from './components/CloudImportModal';
+import { QuickConnectModal } from './components/QuickConnectModal';
 import { HostNotesModal } from './components/HostNotesModal';
+import { MobaToolsModal } from './components/MobaToolsModal';
 import { DistroIcon } from './components/DistroIcon';
+import { Windows11Dialog, Win11DialogOptions } from './components/Windows11Dialog';
+import { Windows11TitleBar } from './components/Windows11TitleBar';
 import { v4 as uuidv4 } from 'uuid';
-import { getGeneralUiSettings, saveGeneralUiSettings, GeneralUiSettings, getSessionSecuritySettings, SessionSecuritySettings } from './settings/settings-manager';
+import { getGeneralUiSettings, saveGeneralUiSettings, GeneralUiSettings, getSessionSecuritySettings, SessionSecuritySettings, applyAppThemeToDom, APP_THEME_PRESETS, getTerminalSettings, saveTerminalSettings } from './settings/settings-manager';
 
 import {
   LayoutDashboard,
@@ -67,6 +71,7 @@ import {
   PlaySquare,
   Flame,
   Wrench,
+  Zap,
   Shield,
   Cpu,
   Layers,
@@ -76,10 +81,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   UploadCloud,
-  Cloud
+  Cloud,
+  Sparkles,
+  Monitor,
+  Laptop,
+  Download
 } from 'lucide-react';
 
-interface TabItem {
+export interface TabItem {
   id: string;
   type: 'dashboard' | 'terminal' | 'sftp' | 'ansible' | 'audit' | 'trust' | 'settings' | 'vault' | 'tunnels';
   title: string;
@@ -89,6 +98,9 @@ interface TabItem {
 }
 
 export const App: React.FC = () => {
+  const isNativeHost = !!((window as any).dgodterm?.isNativeHost || (window as any).chrome?.webview);
+  const isElectron = !!((window as any).dgodterm?.isElectron || (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')));
+  const [win11Dialog, setWin11Dialog] = useState<Win11DialogOptions | null>(null);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [search, setSearch] = useState('');
@@ -108,6 +120,7 @@ export const App: React.FC = () => {
   const [editingProfile, setEditingProfile] = useState<ConnectionProfile | null>(null);
   const [viewingNotesProfile, setViewingNotesProfile] = useState<ConnectionProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showQuickConnectModal, setShowQuickConnectModal] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [pendingHostPrompt, setPendingHostPrompt] = useState<{ sessionId: string; result: any } | null>(null);
   const [pendingPasswordPrompt, setPendingPasswordPrompt] = useState<{
@@ -131,6 +144,10 @@ export const App: React.FC = () => {
   const [showKeyDeploy, setShowKeyDeploy] = useState(false);
   const [showUptimeMonitor, setShowUptimeMonitor] = useState(false);
   const [showCloudImport, setShowCloudImport] = useState(false);
+
+  // MobaXterm Power Tools Suite Modal
+  const [showMobaTools, setShowMobaTools] = useState(false);
+  const [mobaToolsInitialTab, setMobaToolsInitialTab] = useState<'x11' | 'bash' | 'putty' | 'rdp'>('x11');
   const [breakGlassGrant, setBreakGlassGrant] = useState<{
     incidentTicketId: string;
     expiresAt: number;
@@ -263,11 +280,20 @@ export const App: React.FC = () => {
       setSessionSettings(getSessionSecuritySettings());
     };
     const handleUiSettingsUpdated = (e: any) => {
-      setUiSettings(e.detail || getGeneralUiSettings());
+      const next = e.detail || getGeneralUiSettings();
+      setUiSettings(next);
+      applyAppThemeToDom(next);
+      (window as any).dgodterm?.syncUiSettingsToNative?.(next);
     };
     window.addEventListener('dgodterm:settings-updated', handleSettingsUpdated);
     window.addEventListener('dgodterm:session-settings-updated', handleSettingsUpdated);
     window.addEventListener('dgodterm:ui-settings-updated', handleUiSettingsUpdated);
+
+    // Initial sync of UI settings to DOM and Native Host
+    const initialUi = getGeneralUiSettings();
+    applyAppThemeToDom(initialUi);
+    (window as any).dgodterm?.syncUiSettingsToNative?.(initialUi);
+
     return () => {
       window.removeEventListener('dgodterm:settings-updated', handleSettingsUpdated);
       window.removeEventListener('dgodterm:session-settings-updated', handleSettingsUpdated);
@@ -317,6 +343,9 @@ export const App: React.FC = () => {
 
       const now = Date.now();
       const localIdleSeconds = (now - lastActiveTimeRef.current) / 1000;
+      const timeoutSeconds = timeoutMins * 60;
+
+      if (localIdleSeconds < timeoutSeconds) return;
 
       let osIdleSeconds = 0;
       try {
@@ -325,12 +354,11 @@ export const App: React.FC = () => {
         }
       } catch {}
 
-      const timeoutSeconds = timeoutMins * 60;
       if (localIdleSeconds >= timeoutSeconds || (osIdleSeconds >= timeoutSeconds && localIdleSeconds >= 5)) {
         console.log(`[DgodTerm] Inactivity timeout reached (${timeoutMins} min). Auto-locking workstation.`);
         handleLogout();
       }
-    }, 1000);
+    }, 5000);
 
     const unsubLock = (window as any).dgodterm?.onSystemLockScreen?.(() => {
       if (sessionSettings.lockOnOsLock !== false && isAuthenticated && !isLocked) {
@@ -352,6 +380,10 @@ export const App: React.FC = () => {
   profilesRef.current = profiles;
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
+  const uiSettingsRef = useRef(uiSettings);
+  uiSettingsRef.current = uiSettings;
 
   // Sidebar collapse & drag-to-resize states
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -393,21 +425,28 @@ export const App: React.FC = () => {
   sidebarWidthRef.current = uiSettings.sidebarWidth || 260;
 
   useEffect(() => {
+    let rafId: number | null = null;
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingSidebarRef.current) return;
-      // Clamp between min 180px and max 640px (or 50% of window width)
-      const maxAllowed = Math.min(640, Math.floor(window.innerWidth * 0.55));
-      const minAllowed = 180;
-      const newWidth = Math.max(minAllowed, Math.min(maxAllowed, e.clientX));
-      
-      setUiSettings((prev) => {
-        const next = { ...prev, sidebarWidth: newWidth };
-        return next;
+      const clientX = e.clientX;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!isDraggingSidebarRef.current) return;
+        const maxAllowed = Math.min(640, Math.floor(window.innerWidth * 0.55));
+        const minAllowed = 180;
+        const newWidth = Math.max(minAllowed, Math.min(maxAllowed, clientX));
+        sidebarWidthRef.current = newWidth;
+        setUiSettings((prev) => (prev.sidebarWidth === newWidth ? prev : { ...prev, sidebarWidth: newWidth }));
       });
     };
 
     const handleMouseUp = () => {
       if (isDraggingSidebarRef.current) {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         isDraggingSidebarRef.current = false;
         setIsDraggingSidebar(false);
         document.body.style.cursor = '';
@@ -418,9 +457,10 @@ export const App: React.FC = () => {
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -476,12 +516,146 @@ export const App: React.FC = () => {
       }
     );
 
+    // Listen to Native Application Menu Bar triggers
+    const unsubscribeMenuSettings = (window as any).dgodterm?.onMenuOpenSettings?.((tabType?: string) => {
+      const tab = { id: 'tab-settings', type: 'settings' as const, title: 'Governance & Settings' };
+      setTabs((prev) => (!prev.some((t) => t.id === 'tab-settings') ? [...prev, tab] : prev));
+      setActiveTabId('tab-settings');
+      if (tabType) {
+        window.dispatchEvent(new CustomEvent('dgodterm:switch-settings-tab', { detail: tabType }));
+      }
+    });
+
+    const unsubscribeMenuLock = (window as any).dgodterm?.onMenuLockWorkstation?.(() => {
+      handleLogout();
+    });
+
+    const unsubscribeMenuNewTerm = (window as any).dgodterm?.onMenuNewTerminal?.(() => {
+      handleOpenLocalTerminal('powershell');
+    });
+
+    const unsubscribeMenuNewProf = (window as any).dgodterm?.onMenuNewProfile?.(() => {
+      setEditingProfile(null);
+      setShowProfileModal(true);
+    });
+
+    const unsubscribeMenuCloseTab = (window as any).dgodterm?.onMenuCloseTab?.(() => {
+      const curId = activeTabIdRef.current;
+      if (curId && curId !== 'tab-dashboard') {
+        handleCloseTab(curId);
+      }
+    });
+
+    const unsubscribeMenuToggleSidebar = (window as any).dgodterm?.onMenuToggleSidebar?.(() => {
+      toggleSidebarCollapse();
+    });
+
+    const unsubscribeTabActivate = (window as any).dgodterm?.onTabActivate?.((tabId: string) => {
+      setActiveTabId(tabId);
+    });
+
+    const unsubscribeTabClose = (window as any).dgodterm?.onTabClose?.((tabId: string) => {
+      handleCloseTab(tabId);
+    });
+
+    const unsubscribeTabNew = (window as any).dgodterm?.onTabNew?.((type: string) => {
+      if (type === 'powershell' || type === 'cmd' || type === 'wsl' || type === 'bash') {
+        handleOpenLocalTerminal(type as any);
+      } else if (type === 'quick') {
+        setShowQuickConnectModal(true);
+      }
+    });
+
+    const unsubscribeMenuQuick = (window as any).dgodterm?.onMenuQuickConnect?.(() => {
+      setShowQuickConnectModal(true);
+    });
+
+    const unsubscribeMenuSftp = (window as any).dgodterm?.onMenuOpenSftp?.(() => {
+      const currentTabs = tabsRef.current;
+      const curTab = currentTabs.find((t) => t.id === activeTabIdRef.current);
+      if (curTab?.type === 'terminal' && curTab.profile && !curTab.profile.id.startsWith('local-')) {
+        handleOpenSFTP(curTab.profile);
+        return;
+      }
+      const sftpTab = currentTabs.find((t) => t.type === 'sftp');
+      if (sftpTab) {
+        setActiveTabId(sftpTab.id);
+      } else {
+        setShowQuickConnectModal(true);
+      }
+    });
+
+    const unsubscribeMenuAnsible = (window as any).dgodterm?.onMenuOpenAnsible?.(() => {
+      const tab = { id: 'tab-ansible', type: 'ansible' as const, title: 'Ansible Fleet Hub' };
+      setTabs((prev) => (!prev.some((t) => t.id === 'tab-ansible') ? [...prev, tab] : prev));
+      setActiveTabId('tab-ansible');
+    });
+
+    const unsubscribeMenuAudit = (window as any).dgodterm?.onMenuOpenAudit?.(() => {
+      const tab = { id: 'tab-audit', type: 'audit' as const, title: 'ISO 27001 Audit Logs' };
+      setTabs((prev) => (!prev.some((t) => t.id === 'tab-audit') ? [...prev, tab] : prev));
+      setActiveTabId('tab-audit');
+    });
+
+    const unsubscribeMenuTrust = (window as any).dgodterm?.onMenuOpenTrust?.(() => {
+      const tab = { id: 'tab-trust', type: 'trust' as const, title: 'Host Trust Store' };
+      setTabs((prev) => (!prev.some((t) => t.id === 'tab-trust') ? [...prev, tab] : prev));
+      setActiveTabId('tab-trust');
+    });
+
+    const handleProfileSavedEvent = (e: Event) => {
+      const updatedProfile = (e as CustomEvent<ConnectionProfile>).detail;
+      if (!updatedProfile?.id) return;
+      setProfiles((prev) => {
+        const exists = prev.some((p) => p.id === updatedProfile.id);
+        return exists
+          ? prev.map((p) => (p.id === updatedProfile.id ? updatedProfile : p))
+          : [...prev, updatedProfile];
+      });
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.profile?.id === updatedProfile.id ? { ...t, profile: updatedProfile } : t
+        )
+      );
+    };
+    window.addEventListener('dgodterm:profile-saved', handleProfileSavedEvent);
+
     return () => {
+      window.removeEventListener('dgodterm:profile-saved', handleProfileSavedEvent);
       unsubscribeHost();
       if (unsubscribePass) unsubscribePass();
       if (unsubscribeFlavor) unsubscribeFlavor();
+      if (unsubscribeMenuSettings) unsubscribeMenuSettings();
+      if (unsubscribeMenuLock) unsubscribeMenuLock();
+      if (unsubscribeMenuNewTerm) unsubscribeMenuNewTerm();
+      if (unsubscribeMenuNewProf) unsubscribeMenuNewProf();
+      if (unsubscribeMenuCloseTab) unsubscribeMenuCloseTab();
+      if (unsubscribeMenuToggleSidebar) unsubscribeMenuToggleSidebar();
+      if (unsubscribeTabActivate) unsubscribeTabActivate();
+      if (unsubscribeTabClose) unsubscribeTabClose();
+      if (unsubscribeTabNew) unsubscribeTabNew();
+      if (unsubscribeMenuQuick) unsubscribeMenuQuick();
+      if (unsubscribeMenuSftp) unsubscribeMenuSftp();
+      if (unsubscribeMenuAnsible) unsubscribeMenuAnsible();
+      if (unsubscribeMenuAudit) unsubscribeMenuAudit();
+      if (unsubscribeMenuTrust) unsubscribeMenuTrust();
     };
   }, []);
+
+  // Synchronize tabs with Native Windows 11 TitleBar
+  useEffect(() => {
+    (window as any).dgodterm?.syncTabsToNative?.(
+      tabs.map((t) => ({
+        id: t.id,
+        type: t.type,
+        title: t.title,
+        canClose: t.type !== 'dashboard'
+      })),
+      activeTabId,
+      uiSettings.tabStyle || 'rounded',
+      uiSettings.customAccent || uiSettings.accentColor || '#E78A4E'
+    );
+  }, [tabs, activeTabId, uiSettings.tabStyle, uiSettings.accentColor, uiSettings.customAccent, uiSettings.customBackground, uiSettings.customForeground]);
 
   const loadData = async () => {
     try {
@@ -582,12 +756,13 @@ export const App: React.FC = () => {
     };
   }, [showNewTabDropdown, showFleetDropdown]);
 
-  const handleOpenLocalTerminal = (shellId: 'powershell' | 'cmd' | 'wsl') => {
+  const handleOpenLocalTerminal = (shellId: 'powershell' | 'cmd' | 'wsl' | 'bash') => {
     const sessionId = uuidv4();
     const nameMap: Record<string, string> = {
       powershell: 'Local PowerShell',
       cmd: 'Local Command Prompt',
-      wsl: 'Local WSL2 (Linux)'
+      wsl: 'Local WSL2 (Linux)',
+      bash: 'Local Unix (Bash)'
     };
     const displayName = nameMap[shellId] || 'Local Shell';
     const pseudoProfile: ConnectionProfile = {
@@ -600,14 +775,16 @@ export const App: React.FC = () => {
       folder_id: null,
       tags: ['local', shellId],
       jump_host_profile_id: null,
-      auth_reference: { kind: 'agent_reference', reference_id: 'local' },
+      auth_reference: { kind: 'os_keychain', reference_id: 'local' },
       host_trust_policy_id: null,
       ssh_options: { keepalive_interval: 0 },
       is_favorite: false,
       last_connected_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      created_by: 'system'
+      created_by: 'system',
+      os_flavor: shellId === 'bash' ? 'bash' : (shellId === 'wsl' ? 'linux' : undefined),
+      os_name: shellId === 'bash' ? 'GNU Bash & Coreutils' : (shellId === 'wsl' ? 'WSL2 Linux' : undefined)
     };
     launchTerminalTab(sessionId, pseudoProfile);
     setShowNewTabDropdown(false);
@@ -638,7 +815,26 @@ export const App: React.FC = () => {
     setActiveTabId(newTab.id);
   };
 
-  const handlePasswordSubmit = async (password: string) => {
+  const handleQuickConnect = async (
+    profile: ConnectionProfile,
+    password?: string,
+    mode: 'terminal' | 'sftp' = 'terminal'
+  ) => {
+    setShowQuickConnectModal(false);
+    const sessionId = uuidv4();
+
+    if (password) {
+      await (window as any).dgodterm.submitTransientPassword(sessionId, password, -1, profile.id);
+    }
+
+    if (mode === 'sftp') {
+      launchSFTPTab(sessionId, profile);
+    } else {
+      launchTerminalTab(sessionId, profile);
+    }
+  };
+
+  const handlePasswordSubmit = async (password: string, savePassword?: boolean) => {
     if (!pendingPasswordPrompt) return;
     const { sessionId, profile, targetType, initialCommand } = pendingPasswordPrompt;
 
@@ -649,19 +845,44 @@ export const App: React.FC = () => {
     const expiry = retentionMins === 0 ? 0 : Date.now() + ttlMs;
     setCachedProfileIds((prev) => ({ ...prev, [profile.id]: expiry }));
 
+    const effectiveProfile: ConnectionProfile = savePassword
+      ? {
+          ...profile,
+          auth_reference: {
+            kind: 'vault_reference',
+            reference_id:
+              profile.auth_reference?.kind === 'vault_reference' && profile.auth_reference.reference_id
+                ? profile.auth_reference.reference_id
+                : `vault-${profile.id}`,
+            account_or_key_label: `${profile.display_name || profile.hostname} (${profile.username}@${profile.hostname})`,
+            key_path: null,
+            last_used_at: new Date().toISOString()
+          }
+        }
+      : profile;
+
     setPendingPasswordPrompt(null);
 
     // If tab doesn't exist yet, open it now!
     if (!tabs.some((t) => t.sessionId === sessionId)) {
       if (targetType === 'sftp') {
-        launchSFTPTab(sessionId, profile);
+        launchSFTPTab(sessionId, effectiveProfile);
       } else {
-        launchTerminalTab(sessionId, profile, initialCommand);
+        launchTerminalTab(sessionId, effectiveProfile, initialCommand);
       }
     }
   };
 
   const handleOpenSFTP = (profile: ConnectionProfile) => {
+    // If an SFTP tab is already open for this profile, jump directly to it
+    const existingSftpTab = tabs.find(
+      (t) => t.type === 'sftp' && t.profile?.id === profile.id
+    );
+    if (existingSftpTab) {
+      setActiveTabId(existingSftpTab.id);
+      return;
+    }
+
     const sessionId = uuidv4();
 
     // Check if key file is configured
@@ -695,30 +916,52 @@ export const App: React.FC = () => {
     launchSFTPTab(sessionId, profile);
   };
 
-  const handleCloseTab = (tabId: string) => {
-    const tabToClose = tabs.find((t) => t.id === tabId);
-    if (tabToClose?.type === 'terminal' && tabToClose.sessionId && uiSettings.confirmCloseSession) {
-      const ok = window.confirm(`Are you sure you want to close active terminal session "${tabToClose.title}"?`);
-      if (!ok) return;
-    }
+  const executeCloseTab = (tabId: string) => {
+    const currentTabs = tabsRef.current;
+    const tabToClose = currentTabs.find((t) => t.id === tabId);
     if (tabToClose?.sessionId) {
       if (tabToClose.type === 'terminal') {
-        (window as any).dgodterm.disconnectSSH(tabToClose.sessionId);
+        if (tabToClose.profile?.id.startsWith('local-')) {
+          (window as any).dgodterm?.closeLocalShell?.(tabToClose.sessionId);
+        } else {
+          (window as any).dgodterm?.disconnectSSH?.(tabToClose.sessionId);
+        }
       } else if (tabToClose.type === 'sftp') {
-        (window as any).dgodterm.disconnectSFTP(tabToClose.sessionId);
+        (window as any).dgodterm?.disconnectSFTP?.(tabToClose.sessionId);
       }
     }
-    const remaining = tabs.filter((t) => t.id !== tabId);
+    const remaining = currentTabs.filter((t) => t.id !== tabId);
     if (remaining.length === 0) {
       const dashTab: TabItem = { id: 'tab-dashboard', type: 'dashboard', title: 'Workstation Dashboard' };
       setTabs([dashTab]);
       setActiveTabId('tab-dashboard');
     } else {
       setTabs(remaining);
-      if (activeTabId === tabId) {
+      if (activeTabIdRef.current === tabId) {
         setActiveTabId(remaining[remaining.length - 1].id);
       }
     }
+  };
+
+  const handleCloseTab = (tabId: string) => {
+    const tabToClose = tabsRef.current.find((t) => t.id === tabId);
+    if (!tabToClose) return;
+
+    if (tabToClose.type === 'terminal' && tabToClose.sessionId && uiSettingsRef.current.confirmCloseSession) {
+      setWin11Dialog({
+        isOpen: true,
+        type: 'confirm',
+        title: 'Close Active Terminal Session',
+        message: `Are you sure you want to close active terminal session "${tabToClose.title}"?\n\nAny active background processes, commands, or jobs running on this host will be safely disconnected.`,
+        primaryText: 'Close Session',
+        secondaryText: 'Keep Session Open',
+        isDestructive: true,
+        badge: tabToClose.title,
+        onConfirm: () => executeCloseTab(tabId)
+      });
+      return;
+    }
+    executeCloseTab(tabId);
   };
 
   const handleOpenDashboard = () => {
@@ -729,37 +972,63 @@ export const App: React.FC = () => {
     setActiveTabId('tab-dashboard');
   };
 
-
-  const handleCreateFolder = async () => {
-    const name = prompt('Enter new folder name:');
-    if (!name?.trim()) return;
-
-    await (window as any).dgodterm.saveFolder({
-      id: uuidv4(),
-      name: name.trim(),
-      parent_id: null,
-      color: '#3b82f6',
-      created_at: new Date().toISOString()
+  const handleCreateFolder = () => {
+    setWin11Dialog({
+      isOpen: true,
+      type: 'prompt',
+      title: 'New Host Group / Folder',
+      message: 'Enter a folder name to organize your remote server fleet:',
+      placeholder: 'e.g., Production DB Clusters',
+      primaryText: 'Create Folder',
+      secondaryText: 'Cancel',
+      onConfirm: async (name) => {
+        if (!name?.trim()) return;
+        await (window as any).dgodterm?.saveFolder?.({
+          id: uuidv4(),
+          name: name.trim(),
+          parent_id: null,
+          color: '#0078d4',
+          created_at: new Date().toISOString()
+        });
+        loadData();
+      }
     });
-    loadData();
   };
 
-  const handleRenameFolder = async (folder: Folder) => {
-    const newName = prompt(`Enter new name for folder "${folder.name}":`, folder.name);
-    if (!newName || !newName.trim() || newName.trim() === folder.name) return;
-
-    await (window as any).dgodterm.saveFolder({
-      ...folder,
-      name: newName.trim()
+  const handleRenameFolder = (folder: Folder) => {
+    setWin11Dialog({
+      isOpen: true,
+      type: 'prompt',
+      title: 'Rename Folder',
+      message: `Enter new name for folder "${folder.name}":`,
+      defaultValue: folder.name,
+      primaryText: 'Rename',
+      secondaryText: 'Cancel',
+      onConfirm: async (newName) => {
+        if (!newName?.trim() || newName.trim() === folder.name) return;
+        await (window as any).dgodterm?.saveFolder?.({
+          ...folder,
+          name: newName.trim()
+        });
+        loadData();
+      }
     });
-    loadData();
   };
 
-  const handleDeleteFolder = async (folderId: string, folderName: string) => {
-    if (confirm(`Delete folder "${folderName}"?\n\nAny sessions inside will be safely kept and moved to Root (No Folder).`)) {
-      await (window as any).dgodterm.deleteFolder(folderId);
-      loadData();
-    }
+  const handleDeleteFolder = (folderId: string, folderName: string) => {
+    setWin11Dialog({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Delete Folder',
+      message: `Are you sure you want to delete folder "${folderName}"?\n\nAny connection profiles inside will be safely preserved and moved to Root (No Folder).`,
+      primaryText: 'Delete Folder',
+      secondaryText: 'Keep Folder',
+      isDestructive: true,
+      onConfirm: async () => {
+        await (window as any).dgodterm?.deleteFolder?.(folderId);
+        loadData();
+      }
+    });
   };
 
   const handleNewProfileInFolder = (folderId: string) => {
@@ -790,11 +1059,21 @@ export const App: React.FC = () => {
     setShowProfileModal(true);
   };
 
-  const handleDeleteProfile = async (id: string) => {
-    if (confirm('Delete this connection profile?')) {
-      await (window as any).dgodterm.deleteProfile(id);
-      loadData();
-    }
+  const handleDeleteProfile = (id: string) => {
+    const prof = profiles.find((p) => p.id === id);
+    setWin11Dialog({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Delete Connection Profile',
+      message: `Are you sure you want to delete connection profile "${prof?.display_name || 'this server'}"?\n\nSaved host settings and key associations for this host will be permanently removed.`,
+      primaryText: 'Delete Profile',
+      secondaryText: 'Cancel',
+      isDestructive: true,
+      onConfirm: async () => {
+        await (window as any).dgodterm?.deleteProfile?.(id);
+        loadData();
+      }
+    });
   };
 
   const handleMoveProfileToFolder = async (profileId: string, targetFolderId: string | null) => {
@@ -866,127 +1145,144 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`flex h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'dark'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
+      className={`flex flex-col h-screen w-screen bg-[#202020] text-slate-100 overflow-hidden theme-${uiSettings.appTheme || 'windows11'} clarity-${uiSettings.fontAntialiasing || 'subpixel'} stroke-${uiSettings.fontStrokeWeight || 'medium'}`}
       style={{
-        fontFamily: uiSettings.appFontFamily || "'Inter', system-ui, -apple-system, sans-serif",
+        fontFamily: uiSettings.appFontFamily || "'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif",
         fontSize: `${uiSettings.appFontSize || 13}px`
       }}
     >
-      {/* Sidebar */}
-      <div
-        className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
+      {/* Windows 11 Native Top TitleBar with Tabs and Window Controls (Only in Browser/Electron; Native WPF handles this via DWM) */}
+      {!isNativeHost && (
+        <Windows11TitleBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={setActiveTabId}
+          onCloseTab={handleCloseTab}
+          onOpenLocalTerminal={handleOpenLocalTerminal}
+          onOpenQuickConnect={() => setShowQuickConnectModal(true)}
+          onOpenSettings={() => {
+            if (!tabs.some((t) => t.id === 'tab-settings')) {
+              setTabs([...tabs, { id: 'tab-settings', type: 'settings', title: 'Settings' }]);
+            }
+            setActiveTabId('tab-settings');
+          }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={toggleSidebarCollapse}
+          accentColor={uiSettings.accentColor}
+          isElectron={isElectron}
+        />
+      )}
+
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        {/* Sidebar */}
+        <div
+          className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
           isSidebarCollapsed ? 'w-0 border-r-0 p-0 opacity-0 pointer-events-none' : ''
         } ${
           isDraggingSidebar ? 'select-none transition-none' : ''
         }`}
         style={{ width: isSidebarCollapsed ? 0 : `${uiSettings.sidebarWidth}px` }}
       >
-        {/* Brand Header with Quick Theme Mode Toggle & Collapse Sidebar Button */}
-        <div className="p-3.5 border-b border-slate-800 flex items-center justify-between min-w-0">
-          <div
-            onClick={handleOpenDashboard}
-            className="flex items-center gap-2.5 min-w-0 cursor-pointer group"
-            title="Open Workstation Dashboard"
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-600 via-indigo-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0 group-hover:scale-105 transition-transform">
-              <Terminal className="w-4 h-4 text-white" />
+        {/* Streamlined Studio Sidebar Header: Hosts & Quick Actions (No duplicate app logo) */}
+        <div className="px-3 pt-3 pb-2 border-b border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Hosts ({profiles.length})
+              </span>
             </div>
-            <div className="min-w-0">
-              <h1 className="text-sm font-black tracking-wide text-white truncate group-hover:text-sky-300 transition-colors">DgodTerm</h1>
-              <p className="text-[10px] text-slate-400 font-medium truncate">Secure SSH & Ansible</p>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => { setEditingProfile(null); setShowProfileModal(true); }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-600 hover:bg-sky-500 text-white font-semibold text-[11px] transition cursor-pointer"
+                title="Create New Profile"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add</span>
+              </button>
+
+              <button
+                onClick={() => setShowQuickConnectModal(true)}
+                className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+                title="Quick Connect (Ctrl+K)"
+              >
+                <Zap className="w-3.5 h-3.5 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleCreateFolder}
+                className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+                title="New Folder"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => setShowImportExport(true)}
+                className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+                title="Import / Export Hosts"
+              >
+                <FileUp className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => {
+                  const currentMode = uiSettings.themeMode || 'dark';
+                  const nextMode = currentMode === 'dark' ? 'light' : 'dark';
+                  const isLight = nextMode === 'light';
+                  const nextPreset = isLight ? APP_THEME_PRESETS['gruvbox-light'] : APP_THEME_PRESETS['gruvbox-material'];
+                  const nextSettings: GeneralUiSettings = {
+                    ...getGeneralUiSettings(),
+                    themeMode: nextMode as 'dark' | 'light',
+                    appTheme: isLight ? 'light' : 'windows11',
+                    themePreset: nextPreset.id,
+                    customBackground: nextPreset.background,
+                    customForeground: nextPreset.foreground,
+                    customAccent: nextPreset.accent
+                  };
+                  setUiSettings(nextSettings);
+                  saveGeneralUiSettings(nextSettings);
+                  if (nextPreset?.terminalThemeId) {
+                    const ts = getTerminalSettings();
+                    saveTerminalSettings({
+                      ...ts,
+                      themeId: nextPreset.terminalThemeId,
+                      cursorColor: nextPreset.accent
+                    });
+                  }
+                }}
+                className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                title="Toggle Dark / Light Theme"
+              >
+                {(uiSettings.themeMode || 'dark') === 'dark' ? (
+                  <Sun className="w-3.5 h-3.5" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5" />
+                )}
+              </button>
+
+              <button
+                onClick={toggleSidebarCollapse}
+                className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                title="Collapse Sidebar (Ctrl+B)"
+              >
+                <PanelLeftClose className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {/* 1-Click Dark / Dark-Gray Slate Theme Switcher */}
-            <button
-              onClick={() => {
-                const currentTheme = uiSettings.appTheme || 'dark';
-                const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                const nextSettings = { ...getGeneralUiSettings(), appTheme: nextTheme as 'dark' | 'light' };
-                setUiSettings(nextSettings);
-                saveGeneralUiSettings(nextSettings);
-              }}
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
-              title={
-                (uiSettings.appTheme || 'dark') === 'dark'
-                  ? 'Switch to Soft Dark Gray Theme (Glare-Free)'
-                  : 'Switch to Midnight Obsidian Dark Theme'
-              }
-            >
-              {(uiSettings.appTheme || 'dark') === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-sky-400" />
-              )}
-            </button>
-
-            {/* Collapse Sidebar Button */}
-            <button
-              onClick={toggleSidebarCollapse}
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-              title="Collapse Left Sidebar (Ctrl+B)"
-            >
-              <PanelLeftClose className="w-4 h-4 text-slate-400 hover:text-white" />
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Dashboard Overview Navigation Button */}
-        <div className="px-3 pt-2.5">
-          <button
-            onClick={handleOpenDashboard}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-              activeTab?.type === 'dashboard'
-                ? 'bg-sky-600/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                : 'bg-slate-900/60 text-slate-300 hover:bg-slate-900 hover:text-white border border-slate-800/80'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-sky-400" />
-              <span>Dashboard & Overview</span>
-            </div>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-3 pt-3">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-400 focus-within:border-sky-500">
-            <Search className="w-3.5 h-3.5" />
+          {/* Search Input */}
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-full px-3 py-1.5 text-xs text-slate-400 focus-within:border-sky-500">
+            <Search className="w-3.5 h-3.5 shrink-0 text-slate-500" />
             <input
               type="text"
-              placeholder="Search profiles or tags..."
+              placeholder="Filter hosts, IPs, tags..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none w-full"
+              className="bg-transparent text-xs text-slate-200 outline-none w-full placeholder:text-slate-500"
             />
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 px-3 py-2 text-xs">
-          <button
-            onClick={() => { setEditingProfile(null); setShowProfileModal(true); }}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-sky-600 hover:bg-sky-500 text-white font-medium transition"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Profile
-          </button>
-          <button
-            onClick={handleCreateFolder}
-            className="p-1.5 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300"
-            title="Create Folder"
-          >
-            <FolderPlus className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setShowImportExport(true)}
-            className="p-1.5 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300"
-            title="Import / Export"
-          >
-            <FileUp className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Profile List & Folders */}
@@ -1130,272 +1426,185 @@ export const App: React.FC = () => {
           )}
         </div>
 
-        {/* Collapsible Categorized Navigation Sections */}
-        <div className="border-t border-slate-800/80 bg-slate-950/90 text-xs overflow-y-auto max-h-[50vh] divide-y divide-slate-800/40 select-none">
-          {/* SECTION 1: FLEET & AUTOMATION */}
-          <div className="p-1.5">
-            <button
-              onClick={() => toggleNavSection('automation')}
-              className="w-full flex items-center justify-between px-2 py-1 text-[11px] font-bold tracking-wider text-slate-400 hover:text-slate-200 uppercase transition rounded hover:bg-slate-900/60"
-            >
-              <div className="flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Fleet & Automation</span>
-              </div>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
-                  collapsedNavSections['automation'] ? '-rotate-90' : ''
-                }`}
-              />
-            </button>
-
-            {!collapsedNavSections['automation'] && (
-              <div className="mt-1 space-y-0.5">
-                <button
-                  onClick={() => {
-                    const tab = { id: 'tab-ansible', type: 'ansible' as const, title: 'Ansible Fleet Hub' };
-                    if (!tabs.some((t) => t.id === 'tab-ansible')) setTabs([...tabs, tab]);
-                    setActiveTabId('tab-ansible');
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition ${
-                    activeTab?.type === 'ansible'
-                      ? 'bg-indigo-600/20 text-indigo-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                  }`}
-                >
-                  <Sliders className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate">Ansible Automation</span>
-                </button>
-
-                <button
-                  onClick={() => setShowRunbookRunner(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <PlaySquare className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="truncate">Fleet Runbooks</span>
-                </button>
-
-                <button
-                  onClick={() => setShowConfigDrift(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <GitCompare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  <span className="truncate">Configuration Drift</span>
-                </button>
-
-                <button
-                  onClick={() => setShowBatchPush(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <UploadCloud className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate">Fleet File Push</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 2: SECURITY & COMPLIANCE */}
-          <div className="p-1.5">
-            <button
-              onClick={() => toggleNavSection('security')}
-              className="w-full flex items-center justify-between px-2 py-1 text-[11px] font-bold tracking-wider text-slate-400 hover:text-slate-200 uppercase transition rounded hover:bg-slate-900/60"
-            >
-              <div className="flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Security & Trust</span>
-              </div>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
-                  collapsedNavSections['security'] ? '-rotate-90' : ''
-                }`}
-              />
-            </button>
-
-            {!collapsedNavSections['security'] && (
-              <div className="mt-1 space-y-0.5">
-                <button
-                  onClick={() => {
-                    const tab = { id: 'tab-trust', type: 'trust' as const, title: 'Host Trust Store' };
-                    if (!tabs.some((t) => t.id === 'tab-trust')) setTabs([...tabs, tab]);
-                    setActiveTabId('tab-trust');
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition ${
-                    activeTab?.type === 'trust'
-                      ? 'bg-emerald-600/20 text-emerald-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">Host Trust Store</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    const tab = { id: 'tab-audit', type: 'audit' as const, title: 'ISO 27001 Audit Logs' };
-                    if (!tabs.some((t) => t.id === 'tab-audit')) setTabs([...tabs, tab]);
-                    setActiveTabId('tab-audit');
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition ${
-                    activeTab?.type === 'audit'
-                      ? 'bg-sky-600/20 text-sky-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                  }`}
-                >
-                  <Lock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="truncate">Cryptographic Audit Log</span>
-                </button>
-
-                <button
-                  onClick={() => setShowBreakGlass(true)}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md transition cursor-pointer ${
-                    breakGlassGrant
-                      ? 'bg-red-950/40 border border-red-500/40 text-red-200 font-semibold animate-pulse'
-                      : 'text-slate-400 hover:bg-red-950/30 hover:text-red-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <Flame className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <span className="truncate">JIT Break-Glass Access</span>
-                  </div>
-                  {breakGlassGrant && (
-                    <span className="text-[9px] bg-red-500 text-white font-mono px-1.5 py-0.2 rounded font-bold uppercase">
-                      Active
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setShowKeyDeploy(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">SSH Key Deployer</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 3: TOOLBOX & CONNECTIVITY */}
-          <div className="p-1.5">
+        {/* Compact Studio Workspace Modules Dock (Replaces tall 4-section accordion) */}
+        <div className="border-t border-slate-800 bg-slate-950 p-2.5 space-y-2 text-xs select-none shrink-0">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Workspace Modules
+            </span>
             <button
               onClick={() => toggleNavSection('tools')}
-              className="w-full flex items-center justify-between px-2 py-1 text-[11px] font-bold tracking-wider text-slate-400 hover:text-slate-200 uppercase transition rounded hover:bg-slate-900/60"
+              className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition"
+              title="Toggle Engineering & MobaXterm Utilities"
             >
-              <div className="flex items-center gap-1.5">
-                <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                <span>Toolbox & Access</span>
-              </div>
+              <span>Tools</span>
               <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
+                className={`w-3 h-3 transition-transform duration-150 ${
                   collapsedNavSections['tools'] ? '-rotate-90' : ''
                 }`}
               />
             </button>
-
-            {!collapsedNavSections['tools'] && (
-              <div className="mt-1 space-y-0.5">
-                <button
-                  onClick={() => {
-                    const tab = { id: 'tab-vault', type: 'vault' as const, title: 'Password Vault' };
-                    if (!tabs.some((t) => t.id === 'tab-vault')) setTabs([...tabs, tab]);
-                    setActiveTabId('tab-vault');
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition ${
-                    activeTab?.type === 'vault'
-                      ? 'bg-amber-600/20 text-amber-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                  }`}
-                >
-                  <Key className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="truncate">Password Vault</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    const tab = { id: 'tab-tunnels', type: 'tunnels' as const, title: 'Port Forwarding & Tunnels' };
-                    if (!tabs.some((t) => t.id === 'tab-tunnels')) setTabs([...tabs, tab]);
-                    setActiveTabId('tab-tunnels');
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition cursor-pointer ${
-                    activeTab?.type === 'tunnels'
-                      ? 'bg-purple-600/20 text-purple-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                  }`}
-                >
-                  <Network className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span className="truncate">Port Tunnels</span>
-                </button>
-
-                <button
-                  onClick={() => setShowGlobalSnippets(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <Code className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="truncate">Snippets & Commands</span>
-                </button>
-
-                <button
-                  onClick={() => setShowGlobalKeyGen(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">SSH Key Generator</span>
-                </button>
-
-                <button
-                  onClick={() => setShowUptimeMonitor(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="truncate">Uptime & Latency Monitor</span>
-                </button>
-
-                <button
-                  onClick={() => setShowCloudImport(true)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
-                >
-                  <Cloud className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span className="truncate">Cloud Provider Importer</span>
-                </button>
-              </div>
-            )}
           </div>
-        </div>
 
-        {/* Persistent Bottom Settings Bar */}
-        <div className="p-2 border-t border-slate-800/80 bg-slate-950 shrink-0">
-          <button
-            onClick={() => {
-              const tab = { id: 'tab-settings', type: 'settings' as const, title: 'Governance & Settings' };
-              if (!tabs.some((t) => t.id === 'tab-settings')) setTabs([...tabs, tab]);
-              setActiveTabId('tab-settings');
-            }}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition cursor-pointer ${
-              activeTab?.type === 'settings'
-                ? 'bg-purple-600/20 text-purple-300 font-semibold shadow-sm'
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Settings className="w-4 h-4 text-purple-400" />
-              <span className="text-xs font-medium">Settings & Diagnostics</span>
-            </div>
-            <span className="text-[10px] text-slate-500 font-mono">v1.0.0</span>
-          </button>
-
-          <div className="mt-1 pt-1 border-t border-slate-900">
+          {/* Primary 2x3 Compact Module Grid */}
+          <div className="grid grid-cols-2 gap-1.5">
             <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/30 transition text-xs cursor-pointer group"
-              title="Lock Workstation & Sign Out (Requires Master Password / Google MFA to Unlock)"
+              onClick={handleOpenDashboard}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'dashboard'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
             >
-              <div className="flex items-center gap-2.5">
-                <LogOut className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-medium">Lock Workstation</span>
-              </div>
-              <span className="text-[10px] text-slate-500 font-mono">Log Out</span>
+              <LayoutDashboard className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="truncate">Overview</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-vault', type: 'vault' as const, title: 'Password Vault' };
+                if (!tabs.some((t) => t.id === 'tab-vault')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-vault');
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'vault'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">Vault</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-tunnels', type: 'tunnels' as const, title: 'Port Forwarding & Tunnels' };
+                if (!tabs.some((t) => t.id === 'tab-tunnels')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-tunnels');
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'tunnels'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <Network className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="truncate">Tunnels</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-ansible', type: 'ansible' as const, title: 'Ansible Fleet Hub' };
+                if (!tabs.some((t) => t.id === 'tab-ansible')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-ansible');
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'ansible'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="truncate">Ansible</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-trust', type: 'trust' as const, title: 'Host Trust Store' };
+                if (!tabs.some((t) => t.id === 'tab-trust')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-trust');
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'trust'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate">Host Trust</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-audit', type: 'audit' as const, title: 'ISO 27001 Audit Logs' };
+                if (!tabs.some((t) => t.id === 'tab-audit')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-audit');
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-[11.5px] font-medium transition cursor-pointer ${
+                activeTab?.type === 'audit'
+                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">Audit Log</span>
             </button>
           </div>
+
+          {/* Expandable Engineering Utilities Drawer */}
+          {!collapsedNavSections['tools'] && (
+            <div className="pt-1.5 border-t border-slate-800 grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+              <button
+                onClick={() => setShowRunbookRunner(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <PlaySquare className="w-3 h-3 shrink-0" />
+                <span className="truncate">Runbooks</span>
+              </button>
+              <button
+                onClick={() => setShowConfigDrift(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <GitCompare className="w-3 h-3 shrink-0" />
+                <span className="truncate">Config Drift</span>
+              </button>
+              <button
+                onClick={() => setShowBatchPush(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <UploadCloud className="w-3 h-3 shrink-0" />
+                <span className="truncate">Fleet Push</span>
+              </button>
+              <button
+                onClick={() => setShowKeyDeploy(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <KeyRound className="w-3 h-3 shrink-0" />
+                <span className="truncate">Key Deploy</span>
+              </button>
+              <button
+                onClick={() => setShowGlobalSnippets(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <Code className="w-3 h-3 shrink-0" />
+                <span className="truncate">Snippets</span>
+              </button>
+              <button
+                onClick={() => setShowUptimeMonitor(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <Activity className="w-3 h-3 shrink-0" />
+                <span className="truncate">Uptime</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMobaToolsInitialTab('x11');
+                  setShowMobaTools(true);
+                }}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+              >
+                <Monitor className="w-3 h-3 shrink-0" />
+                <span className="truncate">X11 &amp; RDP</span>
+              </button>
+              <button
+                onClick={() => setShowBreakGlass(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-rose-950/30 text-slate-400 hover:text-rose-400 text-[11px] transition cursor-pointer"
+              >
+                <Flame className="w-3 h-3 text-rose-400 shrink-0" />
+                <span className="truncate">JIT Access</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1428,200 +1637,67 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Workspace & Tabs */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-        {/* Top Tab Bar */}
-        <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center px-2 gap-1 shrink-0 relative z-50">
-          {/* Expand Sidebar Toggle (shown when collapsed) */}
-          {isSidebarCollapsed && (
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 relative">
+        {/* Floating Sidebar Toggle when collapsed in Native Host mode */}
+        {isNativeHost && isSidebarCollapsed && (
+          <div className="absolute top-2 left-2 z-40">
             <button
               onClick={toggleSidebarCollapse}
-              className="flex items-center gap-1.5 px-2.5 py-1 mr-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer shrink-0 shadow-sm group"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-sky-500/50 text-slate-300 hover:text-white text-xs font-semibold shadow-lg transition cursor-pointer backdrop-blur-sm"
               title="Expand Left Sidebar (Ctrl+B)"
             >
-              <PanelLeftOpen className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline">Sidebar</span>
+              <PanelLeftOpen className="w-3.5 h-3.5 text-sky-400" />
+              <span>Sidebar</span>
             </button>
-          )}
-
-          {/* Horizontally Scrollable Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto min-w-0 h-full py-0.5 shrink">
-            {tabs.map((tab) => {
-              const isActive = tab.id === activeTabId;
-              const accentBorder = {
-                sky: 'border-sky-500',
-                indigo: 'border-indigo-500',
-                emerald: 'border-emerald-500',
-                rose: 'border-rose-500',
-                amber: 'border-amber-500',
-                cyan: 'border-cyan-500'
-              }[uiSettings.accentColor] || 'border-sky-500';
-
-              const tabClass = uiSettings.tabStyle === 'modern'
-                ? `flex items-center gap-2 px-3 py-1 rounded-lg border text-xs cursor-pointer select-none transition my-1 mx-0.5 shrink-0 ${
-                    isActive
-                      ? `bg-slate-800 text-white font-semibold ${accentBorder} shadow-md`
-                      : 'bg-slate-950/40 text-slate-400 border-slate-800/80 hover:bg-slate-900 hover:text-slate-200'
-                  }`
-                : uiSettings.tabStyle === 'minimal'
-                ? `flex items-center gap-2 px-3 py-2 border-b-2 text-xs cursor-pointer select-none transition bg-transparent shrink-0 ${
-                    isActive
-                      ? `text-white font-semibold ${accentBorder}`
-                      : 'text-slate-400 border-transparent hover:text-slate-200'
-                  }`
-                : `flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-xs cursor-pointer border-t-2 select-none transition shrink-0 ${
-                    isActive
-                      ? `bg-[#090d16] text-white ${accentBorder} font-semibold`
-                      : 'bg-slate-900/40 text-slate-400 border-transparent hover:bg-slate-900 hover:text-slate-200'
-                  }`;
-
-              return (
-                <div
-                  key={tab.id}
-                  onClick={() => setActiveTabId(tab.id)}
-                  className={tabClass}
-                >
-                  {tab.type === 'dashboard' && <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />}
-                  {tab.type === 'terminal' && (
-                    tab.profile?.id === 'local-wsl' ? (
-                      <HardDrive className="w-3.5 h-3.5 text-emerald-400" title="WSL2 Linux Shell" />
-                    ) : tab.profile?.id === 'local-cmd' ? (
-                      <Code className="w-3.5 h-3.5 text-amber-400" title="Command Prompt" />
-                    ) : tab.profile?.id?.startsWith('local-') ? (
-                      <Terminal className="w-3.5 h-3.5 text-cyan-400" title="PowerShell Terminal" />
-                    ) : tab.profile?.os_flavor ? (
-                      <DistroIcon flavor={tab.profile.os_flavor} className="w-3.5 h-3.5" title={tab.profile.os_name || tab.profile.os_flavor} />
-                    ) : (
-                      <Terminal className="w-3.5 h-3.5 text-sky-400" title="SSH Terminal" />
-                    )
-                  )}
-                  {tab.type === 'sftp' && <HardDrive className="w-3.5 h-3.5 text-emerald-400" />}
-                  {tab.type === 'ansible' && <Sliders className="w-3.5 h-3.5 text-indigo-400" />}
-                  {tab.type === 'trust' && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
-                  {tab.type === 'audit' && <Lock className="w-3.5 h-3.5 text-sky-400" />}
-                  {tab.type === 'vault' && <Key className="w-3.5 h-3.5 text-amber-400" />}
-                  {tab.type === 'tunnels' && <Network className="w-3.5 h-3.5 text-purple-400" />}
-                  {tab.type === 'settings' && <Settings className="w-3.5 h-3.5 text-purple-400" />}
-
-                  <span className="truncate max-w-[160px]">{tab.title}</span>
-
-                  {tab.type !== 'dashboard' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCloseTab(tab.id);
-                      }}
-                      className="p-0.5 rounded hover:bg-slate-800 text-slate-500 hover:text-white"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
           </div>
+        )}
 
-          {/* New Tab Dropdown (+) for Local Shells & Remote SSH */}
-          <div className="relative shrink-0 my-1 mx-0.5 z-50" ref={newTabDropdownRef}>
+        {/* Windows 11 CommandBar / Workspace Action Strip (Hidden in Native WPF Host where Toolbar Ribbon is native) */}
+        {!isNativeHost && (
+        <div className="h-9 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 shrink-0 relative z-40 select-none">
+          <div className="flex items-center gap-2">
+            {/* Expand Sidebar Toggle (shown when collapsed) */}
+            {isSidebarCollapsed && (
+              <button
+                onClick={toggleSidebarCollapse}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+                title="Expand Left Sidebar (Ctrl+B)"
+              >
+                <PanelLeftOpen className="w-3.5 h-3.5 text-sky-400" />
+                <span>Sidebar</span>
+              </button>
+            )}
+
+            {/* Quick Connect Action */}
+            <button
+              onClick={() => setShowQuickConnectModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer shadow-sm"
+              title="Quick Connect to SSH or SFTP"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Quick Connect</span>
+            </button>
+
+            {/* MobaXterm Power Tools Suite */}
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowNewTabDropdown((prev) => !prev);
+              onClick={() => {
+                setMobaToolsInitialTab('x11');
+                setShowMobaTools(true);
               }}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-sky-500/60 text-slate-200 hover:text-white text-xs font-semibold transition cursor-pointer shadow-md group"
-              title="Open New Tab (Local Terminal or Remote Host)"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-300 text-xs font-medium transition cursor-pointer"
+              title="MobaXterm Power Tools Suite: X11 Server, Local Bash, PuTTY Import, Remote Desktop"
             >
-              <Plus className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform" />
-              <ChevronDown className="w-2.5 h-2.5 text-slate-400 group-hover:text-slate-200" />
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>MobaXterm Suite</span>
+              <span className="text-[9px] bg-purple-500/30 text-purple-300 px-1 py-0.2 rounded font-mono font-bold">PRO</span>
             </button>
-
-            {showNewTabDropdown && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="absolute top-full left-0 mt-2 w-64 bg-[#0d1527] border border-slate-700 rounded-xl shadow-2xl py-1 text-xs text-slate-200 z-[9999] pointer-events-auto select-none"
-              >
-                <div className="px-3 py-1.5 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>Local System Shells</span>
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60 font-mono">PTY</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenLocalTerminal('powershell');
-                  }}
-                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-sky-300 transition cursor-pointer group"
-                >
-                  <Terminal className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-                  <div>
-                    <div className="font-semibold text-slate-200">PowerShell</div>
-                    <div className="text-[10px] text-slate-400">Windows PowerShell terminal</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenLocalTerminal('wsl');
-                  }}
-                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-emerald-300 transition cursor-pointer group"
-                >
-                  <HardDrive className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <div>
-                    <div className="font-semibold text-slate-200">WSL2 (Linux)</div>
-                    <div className="text-[10px] text-slate-400">Windows Subsystem for Linux</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenLocalTerminal('cmd');
-                  }}
-                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-amber-300 transition cursor-pointer group"
-                >
-                  <Code className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                  <div>
-                    <div className="font-semibold text-slate-200">Command Prompt</div>
-                    <div className="text-[10px] text-slate-400">Standard cmd.exe shell</div>
-                  </div>
-                </button>
-
-                <div className="h-px bg-slate-800 my-1" />
-
-                <div className="px-3 py-1.5 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>Remote Fleet</span>
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-mono">SSH</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowNewTabDropdown(false);
-                    setEditingProfile(null);
-                    setShowProfileModal(true);
-                  }}
-                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-indigo-300 transition cursor-pointer group"
-                >
-                  <Server className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
-                  <div>
-                    <div className="font-semibold text-slate-200">New SSH Server Profile</div>
-                    <div className="text-[10px] text-slate-400">Configure host connection</div>
-                  </div>
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Active JIT Break-Glass Indicator & Fleet Tools */}
-          <div className="ml-auto flex items-center gap-1.5 shrink-0 pl-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Active JIT Break-Glass Indicator */}
             {breakGlassGrant && (
-              <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-950/90 border border-red-500/70 text-red-200 text-xs font-bold animate-pulse shadow-md shadow-red-950/60">
+              <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-950/90 border border-red-500/70 text-red-200 text-xs font-bold animate-pulse shadow-md">
                 <Flame className="w-3.5 h-3.5 text-red-400 fill-current" />
                 <span>JIT: {breakGlassGrant.incidentTicketId}</span>
                 <span className="text-[10px] text-red-300 font-mono">
@@ -1650,122 +1726,123 @@ export const App: React.FC = () => {
                   e.stopPropagation();
                   setShowFleetDropdown((prev) => !prev);
                 }}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/60 text-slate-200 hover:text-white text-xs font-semibold transition cursor-pointer shadow-md group"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer shadow-sm group"
                 title="Fleet Automation, Configuration Drift, JIT & Deployment Tools"
               >
-                <Sliders className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Fleet Ops</span>
-                <ChevronDown className="w-2.5 h-2.5 text-slate-400 group-hover:text-slate-200" />
+                <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
               </button>
 
               {showFleetDropdown && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute right-0 top-full mt-2 w-64 bg-[#0d1527] border border-slate-700 rounded-xl shadow-2xl py-1.5 text-xs text-slate-200 z-[9999] pointer-events-auto select-none"
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 z-[9999] pointer-events-auto select-none"
                 >
                   <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                     <span>Automation & Governance</span>
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-mono">ENTERPRISE</span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">ENTERPRISE</span>
                   </div>
 
                   <button
                     onClick={() => { setShowConfigDrift(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-cyan-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <GitCompare className="w-4 h-4 text-cyan-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">Configuration Drift</div>
-                      <div className="text-[10px] text-slate-400">Multi-host diff comparator</div>
+                      <div className="font-semibold text-white">Configuration Drift</div>
+                      <div className="text-[10px] text-white/60">Multi-host diff comparator</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => { setShowRunbookRunner(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-amber-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <PlaySquare className="w-4 h-4 text-amber-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">Parameterized Runbooks</div>
-                      <div className="text-[10px] text-slate-400">Canary rollout & playbooks</div>
+                      <div className="font-semibold text-white">Parameterized Runbooks</div>
+                      <div className="text-[10px] text-white/60">Canary rollout & playbooks</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => { setShowBreakGlass(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-red-950/40 hover:text-red-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-red-950/40 text-rose-300 hover:text-rose-200 transition cursor-pointer"
                   >
-                    <Flame className="w-4 h-4 text-red-400" />
+                    <Flame className="w-4 h-4 text-rose-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">JIT Break-Glass Access</div>
-                      <div className="text-[10px] text-slate-400">Emergency time-bound elevation</div>
+                      <div className="font-semibold text-rose-200">JIT Break-Glass Access</div>
+                      <div className="text-[10px] text-rose-300/70">Emergency time-bound elevation</div>
                     </div>
                   </button>
 
-                  <div className="h-px bg-slate-800 my-1" />
+                  <div className="h-px bg-white/10 my-1" />
 
-                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="px-3 py-1 text-[10px] font-bold text-white/50 uppercase tracking-wider">
                     Fleet Tools & Deployment
                   </div>
 
                   <button
                     onClick={() => { setShowBatchPush(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-sky-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <UploadCloud className="w-4 h-4 text-sky-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">Batch Command / Push</div>
-                      <div className="text-[10px] text-slate-400">Parallel command broadcast</div>
+                      <div className="font-semibold text-white">Batch Command / Push</div>
+                      <div className="text-[10px] text-white/60">Parallel command broadcast</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => { setShowKeyDeploy(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-emerald-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <KeyRound className="w-4 h-4 text-emerald-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">SSH Key Deployer</div>
-                      <div className="text-[10px] text-slate-400">Push public keys to servers</div>
+                      <div className="font-semibold text-white">SSH Key Deployer</div>
+                      <div className="text-[10px] text-white/60">Push public keys to servers</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => { setShowUptimeMonitor(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-emerald-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <Activity className="w-4 h-4 text-emerald-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">Fleet Uptime Monitor</div>
-                      <div className="text-[10px] text-slate-400">Real-time health pings & stats</div>
+                      <div className="font-semibold text-white">Fleet Uptime Monitor</div>
+                      <div className="text-[10px] text-white/60">Real-time health pings & stats</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => { setShowCloudImport(true); setShowFleetDropdown(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-slate-800/90 hover:text-purple-300 transition cursor-pointer"
+                    className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 hover:bg-white/10 text-white/90 hover:text-white transition cursor-pointer"
                   >
                     <Cloud className="w-4 h-4 text-purple-400" />
                     <div>
-                      <div className="font-semibold text-slate-200">Cloud Sync & Import</div>
-                      <div className="text-[10px] text-slate-400">AWS EC2, GCP, Azure VMs</div>
+                      <div className="font-semibold text-white">Cloud Sync & Import</div>
+                      <div className="text-[10px] text-white/60">AWS EC2, GCP, Azure VMs</div>
                     </div>
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="h-4 w-px bg-slate-800 mx-0.5" />
+            <div className="h-3.5 w-px bg-white/10 mx-0.5" />
 
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 hover:bg-rose-950/50 border border-slate-800 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 text-xs font-medium transition cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#2a2a2a] hover:bg-rose-950/50 border border-white/10 hover:border-rose-500/40 text-white/80 hover:text-rose-300 text-xs font-medium transition cursor-pointer"
               title="Lock Workstation & Sign Out (Requires Master Password / Google MFA to Unlock)"
             >
               <LogOut className="w-3.5 h-3.5 text-rose-400" />
-              <span>Lock / Logout</span>
+              <span className="hidden md:inline">Lock Workstation</span>
             </button>
           </div>
         </div>
+        )}
 
         {/* Multi-Host Broadcast Input Bar */}
         {(() => {
@@ -1812,6 +1889,7 @@ export const App: React.FC = () => {
                   isActive={isVisible}
                   initialCommand={tab.initialCommand}
                   onClose={() => handleCloseTab(tab.id)}
+                  onOpenSFTP={handleOpenSFTP}
                   onRequestPassword={(sid, prof) => {
                     setPendingPasswordPrompt({
                       sessionId: sid,
@@ -1888,63 +1966,52 @@ export const App: React.FC = () => {
                 if (modalName === 'uptime') setShowUptimeMonitor(true);
                 if (modalName === 'cloudimport') setShowCloudImport(true);
               }}
+              onOpenMobaTools={(tab) => {
+                if (tab) setMobaToolsInitialTab(tab);
+                setShowMobaTools(true);
+              }}
+              onOpenLocalBash={() => handleOpenLocalTerminal('bash')}
             />
           </div>
 
-          <div style={{ display: activeTab?.type === 'ansible' ? 'block' : 'none', height: '100%' }}>
-            <AnsibleView />
-          </div>
-          <div style={{ display: activeTab?.type === 'trust' ? 'block' : 'none', height: '100%' }}>
-            <TrustStoreView />
-          </div>
-          <div style={{ display: activeTab?.type === 'audit' ? 'block' : 'none', height: '100%' }}>
-            <AuditView />
-          </div>
-          <div style={{ display: activeTab?.type === 'vault' ? 'block' : 'none', height: '100%' }}>
-            <PasswordVaultView />
-          </div>
-          <div style={{ display: activeTab?.type === 'tunnels' ? 'block' : 'none', height: '100%' }}>
-            <TunnelManagerView />
-          </div>
-          <div style={{ display: activeTab?.type === 'settings' ? 'block' : 'none', height: '100%' }}>
-            <SettingsView />
-          </div>
+          {tabs.some((t) => t.type === 'ansible') && (
+            <div style={{ display: activeTab?.type === 'ansible' ? 'block' : 'none', height: '100%' }}>
+              <AnsibleView />
+            </div>
+          )}
+          {tabs.some((t) => t.type === 'trust') && (
+            <div style={{ display: activeTab?.type === 'trust' ? 'block' : 'none', height: '100%' }}>
+              <TrustStoreView />
+            </div>
+          )}
+          {tabs.some((t) => t.type === 'audit') && (
+            <div style={{ display: activeTab?.type === 'audit' ? 'block' : 'none', height: '100%' }}>
+              <AuditView />
+            </div>
+          )}
+          {tabs.some((t) => t.type === 'vault') && (
+            <div style={{ display: activeTab?.type === 'vault' ? 'block' : 'none', height: '100%' }}>
+              <PasswordVaultView />
+            </div>
+          )}
+          {tabs.some((t) => t.type === 'tunnels') && (
+            <div style={{ display: activeTab?.type === 'tunnels' ? 'block' : 'none', height: '100%' }}>
+              <TunnelManagerView />
+            </div>
+          )}
+          {tabs.some((t) => t.type === 'settings') && (
+            <div style={{ display: activeTab?.type === 'settings' ? 'block' : 'none', height: '100%' }}>
+              <SettingsView />
+            </div>
+          )}
         </div>
 
         {/* Global Security Status Bar */}
         {uiSettings.showStatusBar && (
           <div className="h-6.5 bg-slate-950 border-t border-slate-800/80 px-3 flex items-center justify-between text-[11px] text-slate-500 select-none shrink-0 font-mono whitespace-nowrap overflow-x-auto overflow-y-hidden gap-2">
-            {/* Left: Security & Governance */}
-            <div className="flex items-center gap-2 lg:gap-3 shrink-0">
-              <span className="flex items-center gap-1.5 text-slate-400 whitespace-nowrap" title="Host Key & Identity Policy: Strict Verification Active">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="hidden 2xl:inline">Strict Host Verification:</span>
-                <span className="hidden sm:inline 2xl:hidden">Host:</span>
-                <span className="text-emerald-400 font-medium">Active</span>
-              </span>
-
-              <span className="text-slate-700 hidden sm:inline">•</span>
-
-              <span className="flex items-center gap-1.5 text-slate-400 whitespace-nowrap" title="Cryptographic SHA-256 Hash Chain Integrity Verification">
-                <Lock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="hidden 2xl:inline">Audit Integrity Chain:</span>
-                <span className="hidden md:inline 2xl:hidden">Audit:</span>
-                <span className="text-sky-300 font-medium">SHA-256</span>
-              </span>
-
-              <span className="text-slate-700 hidden lg:inline">•</span>
-
-              <span className="hidden lg:flex items-center gap-1.5 text-slate-400 whitespace-nowrap" title="Automatic Credentials & Secret Redaction Engine">
-                <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="hidden 2xl:inline">Secret Redactor:</span>
-                <span className="hidden xl:inline 2xl:hidden">Redactor:</span>
-                <span className="text-emerald-400 font-medium">ACTIVE</span>
-              </span>
-            </div>
-
-            {/* Center: Live Host Resource Telemetry */}
-            {hostResources && (
-              <div className="flex items-center gap-2 lg:gap-3 text-slate-400 shrink-0 px-2">
+            {/* Live Host Resource Telemetry */}
+            {hostResources ? (
+              <div className="flex items-center gap-2 lg:gap-3 text-slate-400 shrink-0">
                 <span className="flex items-center gap-1.5 whitespace-nowrap" title="Host CPU Utilization">
                   <Cpu className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                   <span>
@@ -1955,41 +2022,42 @@ export const App: React.FC = () => {
                   </span>
                 </span>
 
-                <span className="text-slate-700 hidden sm:inline">•</span>
+                <span className="text-slate-700">•</span>
 
                 <span className="flex items-center gap-1.5 whitespace-nowrap" title={`Host Physical RAM Usage: ${hostResources.ramUsedGB}/${hostResources.ramTotalGB} GB (${hostResources.ramPercent}%)`}>
                   <Layers className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span>
                     RAM:{' '}
                     <strong className={hostResources.ramPercent > 80 ? 'text-amber-400 font-semibold' : 'text-slate-200 font-medium'}>
-                      <span className="hidden 2xl:inline">{hostResources.ramUsedGB}/{hostResources.ramTotalGB} GB </span>
-                      ({hostResources.ramPercent}%)
+                      {hostResources.ramUsedGB}/{hostResources.ramTotalGB} GB ({hostResources.ramPercent}%)
                     </strong>
                   </span>
                 </span>
 
-                <span className="text-slate-700 hidden sm:inline">•</span>
+                <span className="text-slate-700">•</span>
 
                 <span className="flex items-center gap-1.5 whitespace-nowrap" title={`Host Primary Disk Usage: ${hostResources.diskUsedGB}/${hostResources.diskTotalGB} GB (${hostResources.diskPercent}%)`}>
                   <HardDrive className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span>
                     Disk:{' '}
                     <strong className={hostResources.diskPercent > 85 ? 'text-rose-400 font-semibold' : 'text-slate-200 font-medium'}>
-                      <span className="hidden 2xl:inline">{hostResources.diskUsedGB}/{hostResources.diskTotalGB} GB </span>
-                      ({hostResources.diskPercent}%)
+                      {hostResources.diskUsedGB}/{hostResources.diskTotalGB} GB ({hostResources.diskPercent}%)
                     </strong>
                   </span>
                 </span>
               </div>
+            ) : (
+              <div />
             )}
 
             {/* Right: Version & Standard */}
             <div className="hidden md:flex items-center gap-1.5 shrink-0 text-slate-500 whitespace-nowrap">
-              <span>DgodTerm v1.0.0</span>
+              <span>DgodTerm v2.0.0</span>
               <span className="hidden xl:inline text-slate-600">(ISO/IEC 27001 Aligned)</span>
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* Modals */}
@@ -1997,10 +2065,17 @@ export const App: React.FC = () => {
         <ProfileEditModal
           initialProfile={editingProfile}
           folders={folders}
-          onSave={async (prof) => {
+          onSave={async (prof, andConnect) => {
             await (window as any).dgodterm.saveProfile(prof);
             setShowProfileModal(false);
+            setProfiles((prev) => {
+              const exists = prev.some((p) => p.id === prof.id);
+              return exists ? prev.map((p) => (p.id === prof.id ? prof : p)) : [...prev, prof];
+            });
             loadData();
+            if (andConnect) {
+              handleOpenTerminal(prof);
+            }
           }}
           onCancel={() => setShowProfileModal(false)}
         />
@@ -2025,6 +2100,14 @@ export const App: React.FC = () => {
           folders={folders}
           onClose={() => setShowImportExport(false)}
           onRefreshProfiles={loadData}
+        />
+      )}
+
+      {showQuickConnectModal && (
+        <QuickConnectModal
+          isOpen={showQuickConnectModal}
+          onClose={() => setShowQuickConnectModal(false)}
+          onConnect={handleQuickConnect}
         />
       )}
 
@@ -2155,6 +2238,16 @@ export const App: React.FC = () => {
         />
       )}
 
+      {/* MobaXterm Power Tools Suite Hub Modal */}
+      <MobaToolsModal
+        isOpen={showMobaTools}
+        onClose={() => setShowMobaTools(false)}
+        onOpenLocalBash={() => handleOpenLocalTerminal('bash')}
+        onRefreshProfiles={loadData}
+        folders={folders}
+        initialTab={mobaToolsInitialTab}
+      />
+
       {/* Enterprise App Login & Google MFA Modal */}
       {(!isAuthenticated || isLocked) && (
         <AppLoginModal
@@ -2168,6 +2261,12 @@ export const App: React.FC = () => {
           }}
         />
       )}
+
+      {/* Windows 11 Native ContentDialog Modal System */}
+      <Windows11Dialog
+        dialog={win11Dialog}
+        onClose={() => setWin11Dialog(null)}
+      />
     </div>
   );
 };
@@ -2492,7 +2591,7 @@ const ProfileSidebarItem: React.FC<ProfileSidebarItemProps> = ({
           ? 'bg-red-950/20 border border-red-500/20 hover:border-red-500/50 hover:bg-red-950/30'
           : reachabilityStatus === 'up'
           ? 'hover:bg-slate-900/90 hover:border-emerald-500/30 border border-transparent'
-          : 'hover:bg-slate-900/90 border border-transparent'
+          : 'hover:bg-slate-900/90 hover:border-slate-800 border border-transparent'
       }`}
     >
       <div className="flex items-center gap-2 truncate pointer-events-none">

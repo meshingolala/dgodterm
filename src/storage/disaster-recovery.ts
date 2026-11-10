@@ -142,7 +142,7 @@ export class DisasterRecoveryService {
 
     return {
       appName: 'DgodTerm Workstation',
-      appVersion: '1.0.0',
+      appVersion: '2.0.0',
       timestamp: new Date().toISOString(),
       platform: {
         os: `${os.type()} ${os.release()} (${os.arch()})`,

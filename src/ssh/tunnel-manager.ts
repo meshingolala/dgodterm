@@ -4,6 +4,7 @@ import { PortForwardConfig, ConnectionProfile } from '../domain/types';
 import { dbOperations } from '../storage/db';
 import { CredentialBroker } from '../credential/credential-broker';
 import { AuditService } from '../audit/audit-service';
+import { getSupportedSshAlgorithms } from './ssh-client';
 
 interface ActiveTunnel {
   config: PortForwardConfig;
@@ -109,6 +110,7 @@ export class TunnelManager {
         username: profile.username,
         readyTimeout: 15000,
         tryKeyboard: true,
+        algorithms: getSupportedSshAlgorithms(),
         hostVerifier: (_key: Buffer, cb: (accept: boolean) => void) => cb(true)
       };
 

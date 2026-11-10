@@ -271,10 +271,25 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
   if (loading || !authStatus) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090d16] text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-slate-400 font-mono tracking-wider">Securing Workstation Environment...</span>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+        style={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+      >
+        <div
+          className="flex flex-col items-center gap-3 p-6 rounded-2xl shadow-xl"
+          style={{
+            backgroundColor: 'var(--dgod-bg-surface)',
+            border: '1px solid var(--dgod-border-strong)',
+            color: 'var(--dgod-text-primary)'
+          }}
+        >
+          <div
+            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: 'var(--dgod-accent)', borderTopColor: 'transparent' }}
+          />
+          <span className="text-xs font-mono tracking-wider" style={{ color: 'var(--dgod-text-secondary)' }}>
+            Securing Workstation Environment...
+          </span>
         </div>
       </div>
     );
@@ -283,17 +298,38 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
   // First-time configuration screen
   if (authStatus && !authStatus.isConfigured) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
-        <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-7 flex flex-col space-y-5 my-8">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/20 text-sky-400 border border-sky-500/30">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto"
+        style={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+      >
+        <div
+          className="w-full max-w-lg rounded-2xl shadow-2xl p-7 flex flex-col space-y-5 my-8 transition-all"
+          style={{
+            backgroundColor: 'var(--dgod-bg-surface)',
+            border: '1px solid var(--dgod-border-strong)',
+            color: 'var(--dgod-text-primary)',
+            boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.25), 0 0 1px 1px var(--dgod-border)'
+          }}
+        >
+          <div
+            className="flex items-center gap-3 pb-3 border-b"
+            style={{ borderColor: 'var(--dgod-border)' }}
+          >
+            <div
+              className="p-2.5 rounded-xl shadow-inner"
+              style={{
+                backgroundColor: 'var(--dgod-accent-subtle)',
+                color: 'var(--dgod-accent)',
+                border: '1px solid var(--dgod-accent)'
+              }}
+            >
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold flex items-center gap-2" style={{ color: 'var(--dgod-text-primary)' }}>
                 Setup Workstation Security
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs" style={{ color: 'var(--dgod-text-secondary)' }}>
                 Create a master password to protect your SSH keys, credentials, and servers.
               </p>
             </div>
@@ -301,23 +337,29 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
           <form onSubmit={handleInitialSetupSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--dgod-text-primary)' }}>
                 Workstation Master Password (Min 6 chars)
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+                <Lock className="w-4 h-4 absolute left-3 top-2.5" style={{ color: 'var(--dgod-text-muted)' }} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter strong password..."
                   value={setupPassword}
                   onChange={(e) => setSetupPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-9 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                  className="w-full rounded-lg pl-9 pr-9 py-2 text-xs font-mono focus:outline-none transition"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)',
+                    color: 'var(--dgod-text-primary)'
+                  }}
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                  className="absolute right-3 top-2.5 transition"
+                  style={{ color: 'var(--dgod-text-muted)' }}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -325,24 +367,29 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--dgod-text-primary)' }}>
                 Confirm Master Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+                <Lock className="w-4 h-4 absolute left-3 top-2.5" style={{ color: 'var(--dgod-text-muted)' }} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Re-type password..."
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                  className="w-full rounded-lg pl-9 pr-3 py-2 text-xs font-mono focus:outline-none transition"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)',
+                    color: 'var(--dgod-text-primary)'
+                  }}
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--dgod-text-primary)' }}>
                 Password Hint (Optional)
               </label>
               <input
@@ -350,12 +397,17 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                 placeholder="e.g. Favorite datacenter rack name"
                 value={setupHint}
                 onChange={(e) => setSetupHint(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                className="w-full rounded-lg px-3 py-2 text-xs focus:outline-none transition"
+                style={{
+                  backgroundColor: 'var(--dgod-bg-sidebar)',
+                  border: '1px solid var(--dgod-border-strong)',
+                  color: 'var(--dgod-text-primary)'
+                }}
               />
             </div>
 
             {/* Google MFA Toggle */}
-            <div className="pt-2 border-t border-slate-800">
+            <div className="pt-2 border-t" style={{ borderColor: 'var(--dgod-border)' }}>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -367,20 +419,27 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                       handleStartMfaSetup();
                     }
                   }}
-                  className="rounded border-slate-700 text-sky-500 focus:ring-0 w-4 h-4 bg-slate-950"
+                  className="rounded w-4 h-4"
+                  style={{ accentColor: 'var(--dgod-accent)' }}
                 />
-                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--dgod-text-primary)' }}>
+                  <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   Enable Google Authenticator (MFA / 2FA)
                 </span>
               </label>
-              <p className="text-[11px] text-slate-400 mt-1 pl-6">
+              <p className="text-[11px] mt-1 pl-6" style={{ color: 'var(--dgod-text-secondary)' }}>
                 Requires a 6-digit TOTP verification code each time you launch or unlock DgodTerm.
               </p>
 
               {enableMfaOnSetup && mfaSetupData && (
-                <div className="mt-3 p-4 bg-slate-950/80 border border-emerald-500/30 rounded-xl space-y-3">
-                  <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
+                <div
+                  className="mt-3 p-4 rounded-xl space-y-3"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)'
+                  }}
+                >
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     <QrCode className="w-4 h-4" />
                     Scan QR with Google Authenticator or 2FA App
                   </div>
@@ -389,25 +448,33 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                     <QrCanvas text={mfaSetupData.otpauthUrl} size={150} />
 
                     <div className="space-y-2 flex-1 text-center sm:text-left">
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px]" style={{ color: 'var(--dgod-text-secondary)' }}>
                         Or enter this manual secret key in your authenticator app:
                       </div>
-                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded p-1.5 font-mono text-[11px] text-emerald-300">
+                      <div
+                        className="flex items-center gap-1 rounded p-1.5 font-mono text-[11px]"
+                        style={{
+                          backgroundColor: 'var(--dgod-bg-surface-elevated)',
+                          border: '1px solid var(--dgod-border-strong)',
+                          color: 'var(--dgod-text-primary)'
+                        }}
+                      >
                         <span className="flex-1 truncate select-all">{mfaSetupData.secret}</span>
                         <button
                           type="button"
                           onClick={() => handleCopySecret(mfaSetupData.secret)}
-                          className="p-1 hover:text-white"
+                          className="p-1 cursor-pointer"
+                          style={{ color: 'var(--dgod-text-muted)' }}
                           title="Copy key"
                         >
-                          {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    <label className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--dgod-text-primary)' }}>
                       Enter 6-digit Authenticator Code to verify:
                     </label>
                     <input
@@ -416,7 +483,12 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                       placeholder="123456"
                       value={setupMfaToken}
                       onChange={(e) => setSetupMfaToken(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-center text-sm font-mono tracking-widest text-emerald-300 focus:outline-none focus:border-emerald-500"
+                      className="w-full rounded-lg p-2 text-center text-sm font-mono tracking-widest focus:outline-none"
+                      style={{
+                        backgroundColor: 'var(--dgod-bg-surface-elevated)',
+                        border: '1px solid var(--dgod-border-strong)',
+                        color: 'var(--dgod-text-primary)'
+                      }}
                     />
                   </div>
                 </div>
@@ -424,8 +496,8 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
             </div>
 
             {error && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 dark:text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -433,7 +505,11 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold text-xs transition shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md active:scale-[0.99]"
+              style={{
+                backgroundColor: 'var(--dgod-accent)',
+                color: '#ffffff'
+              }}
             >
               <ShieldCheck className="w-4 h-4" />
               {isSubmitting ? 'Configuring Secure Workstation...' : 'Initialize & Enter DgodTerm'}
@@ -446,35 +522,65 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
   // Standard Login / Unlock Screen
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0c1220] shadow-2xl p-8 flex flex-col space-y-6 relative overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl shadow-2xl p-8 flex flex-col space-y-6 relative overflow-hidden transition-all duration-200"
+        style={{
+          backgroundColor: 'var(--dgod-bg-surface)',
+          border: '1px solid var(--dgod-border-strong)',
+          color: 'var(--dgod-text-primary)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28), 0 0 1px 1px var(--dgod-border)'
+        }}
+      >
         {/* Glow accent */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-gradient-to-r from-transparent via-sky-500 to-transparent blur-sm" />
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 blur-sm"
+          style={{
+            background: 'linear-gradient(to right, transparent, var(--dgod-accent), transparent)'
+          }}
+        />
 
         {/* Brand header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex p-3 rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-inner">
-            <Lock className="w-8 h-8" />
+          <div
+            className="inline-flex p-3 rounded-2xl shadow-inner transition-transform"
+            style={{
+              backgroundColor: 'var(--dgod-accent-subtle)',
+              color: 'var(--dgod-accent)',
+              border: '1px solid var(--dgod-accent)'
+            }}
+          >
+            <Lock className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">
+          <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--dgod-text-primary)' }}>
             DgodTerm Workstation
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs" style={{ color: 'var(--dgod-text-secondary)' }}>
             Enterprise Linux Fleet & SSH Workstation Authentication
           </p>
         </div>
 
         {/* Google MFA Status Header Badge */}
-        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Smartphone className={`w-3.5 h-3.5 ${authStatus?.mfaEnabled ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span>Google MFA:</span>
+        <div
+          className="flex items-center justify-between px-3.5 py-2 rounded-xl text-xs"
+          style={{
+            backgroundColor: 'var(--dgod-bg-surface-elevated)',
+            border: '1px solid var(--dgod-border)',
+            color: 'var(--dgod-text-secondary)'
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4" style={{ color: authStatus?.mfaEnabled ? '#10b981' : 'var(--dgod-accent)' }} />
+            <span className="font-medium">Google MFA:</span>
             {authStatus?.mfaEnabled ? (
-              <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                <Check className="w-3 h-3" /> Enabled
+              <span className="font-semibold flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <Check className="w-3.5 h-3.5" /> Enabled
               </span>
             ) : (
-              <span className="text-amber-400 font-semibold">Not Configured</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">Not Configured</span>
             )}
           </div>
 
@@ -482,7 +588,12 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
             <button
               type="button"
               onClick={handleOpenPairModal}
-              className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition cursor-pointer"
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer"
+              style={{
+                backgroundColor: 'var(--dgod-accent-subtle)',
+                color: 'var(--dgod-accent)',
+                border: '1px solid var(--dgod-accent)'
+              }}
             >
               + Set Up MFA
             </button>
@@ -492,11 +603,11 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
         {/* Login Form */}
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+            <label className="block text-xs font-semibold mb-1.5 flex items-center justify-between" style={{ color: 'var(--dgod-text-primary)' }}>
               <span className="flex items-center gap-1.5">
                 Workstation Password
                 {requiresMfaStep && (
-                  <span className="text-[10px] text-emerald-400 font-normal flex items-center gap-0.5">
+                  <span className="text-[10px] font-normal flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400">
                     <Check className="w-3 h-3" /> Password Verified
                   </span>
                 )}
@@ -511,20 +622,21 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                       setError('');
                       setTimeout(() => passwordInputRef.current?.focus(), 50);
                     }}
-                    className="text-[10px] text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                    className="text-[10px] underline cursor-pointer"
+                    style={{ color: 'var(--dgod-accent)' }}
                   >
                     Edit password
                   </button>
                 )}
                 {authStatus?.hint && (
-                  <span className="text-[10px] text-slate-500 font-normal">
+                  <span className="text-[10px] font-normal" style={{ color: 'var(--dgod-text-muted)' }}>
                     Hint: {authStatus.hint}
                   </span>
                 )}
               </div>
             </label>
             <div className="relative">
-              <KeyRound className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
+              <KeyRound className="w-4 h-4 absolute left-3.5 top-3" style={{ color: 'var(--dgod-text-muted)' }} />
               <input
                 ref={passwordInputRef}
                 type={showPassword ? 'text' : 'password'}
@@ -539,13 +651,20 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                     setError('');
                   }
                 }}
-                className={`w-full bg-slate-950/80 border ${requiresMfaStep ? 'border-emerald-500/50 opacity-75' : 'border-slate-700/80'} rounded-xl pl-10 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 font-mono transition`}
+                className="w-full rounded-xl pl-10 pr-10 py-2.5 text-xs font-mono transition focus:outline-none"
+                style={{
+                  backgroundColor: 'var(--dgod-bg-sidebar)',
+                  border: requiresMfaStep ? '1px solid #10b981' : '1px solid var(--dgod-border-strong)',
+                  color: 'var(--dgod-text-primary)',
+                  opacity: requiresMfaStep ? 0.75 : 1
+                }}
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                className="absolute right-3.5 top-3 transition cursor-pointer"
+                style={{ color: 'var(--dgod-text-muted)' }}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -554,13 +673,19 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
           {/* MFA input: rendered only when master password entered is verified and MFA is required */}
           {requiresMfaStep && (
-            <div className="p-3.5 bg-slate-950/80 border border-emerald-500/30 rounded-xl space-y-2 animate-fadeIn">
+            <div
+              className="p-4 rounded-xl space-y-2 animate-fadeIn"
+              style={{
+                backgroundColor: 'var(--dgod-bg-sidebar)',
+                border: '1px solid rgba(16, 185, 129, 0.4)'
+              }}
+            >
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                <label className="block text-xs font-semibold flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <Smartphone className="w-4 h-4" />
                   Google Authenticator Code (2FA)
                 </label>
-                <span className="text-[10px] text-emerald-500 font-mono">6 Digits</span>
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">6 Digits</span>
               </div>
               <input
                 ref={mfaInputRef}
@@ -572,17 +697,22 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                 disabled={isSubmitting}
                 autoFocus
                 onChange={(e) => setMfaToken(e.target.value.replace(/\D/g, ''))}
-                className="w-full bg-slate-900 border border-emerald-500/60 rounded-lg p-2.5 text-center text-sm font-mono tracking-widest text-emerald-300 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                className="w-full rounded-lg p-2.5 text-center text-sm font-mono tracking-widest focus:outline-none"
+                style={{
+                  backgroundColor: 'var(--dgod-bg-surface)',
+                  border: '1px solid #10b981',
+                  color: 'var(--dgod-text-primary)'
+                }}
               />
-              <p className="text-[11px] text-slate-400 text-center">
+              <p className="text-[11px] text-center" style={{ color: 'var(--dgod-text-secondary)' }}>
                 Open Google Authenticator on your mobile phone and enter the 6-digit code.
               </p>
             </div>
           )}
 
           {error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 dark:text-rose-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -590,7 +720,11 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
           <button
             type="submit"
             disabled={isSubmitting || !password || (requiresMfaStep && mfaToken.length !== 6)}
-            className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs transition shadow-lg shadow-sky-600/30 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md active:scale-[0.99]"
+            style={{
+              backgroundColor: 'var(--dgod-accent)',
+              color: '#ffffff'
+            }}
           >
             <ShieldCheck className="w-4 h-4" />
             {isSubmitting
@@ -603,15 +737,26 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
         {/* Option to pair Google MFA if not configured yet */}
         {!authStatus?.mfaEnabled && (
-          <div className="p-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl flex items-center justify-between gap-3">
+          <div
+            className="p-3 rounded-xl flex items-center justify-between gap-3 border border-dashed"
+            style={{
+              backgroundColor: 'var(--dgod-bg-surface-elevated)',
+              borderColor: 'var(--dgod-border-strong)'
+            }}
+          >
             <div className="text-left">
-              <div className="text-xs font-medium text-slate-300">Need Google MFA enabled?</div>
-              <div className="text-[11px] text-slate-500">Add two-factor TOTP protection now</div>
+              <div className="text-xs font-medium" style={{ color: 'var(--dgod-text-primary)' }}>Need Google MFA enabled?</div>
+              <div className="text-[11px]" style={{ color: 'var(--dgod-text-secondary)' }}>Add two-factor TOTP protection now</div>
             </div>
             <button
               type="button"
               onClick={handleOpenPairModal}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer"
+              style={{
+                backgroundColor: 'var(--dgod-accent-subtle)',
+                color: 'var(--dgod-accent)',
+                border: '1px solid var(--dgod-accent)'
+              }}
             >
               <QrCode className="w-3.5 h-3.5" />
               <span>Pair Google MFA</span>
@@ -619,47 +764,85 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
           </div>
         )}
 
-        <div className="pt-2 border-t border-slate-800 text-center text-[11px] text-slate-500">
+        <div
+          className="pt-2 border-t text-center text-[11px]"
+          style={{
+            borderColor: 'var(--dgod-border)',
+            color: 'var(--dgod-text-muted)'
+          }}
+        >
           AES-256-GCM Zero-Knowledge Storage Policy | ISO 27001 Ready
         </div>
       </div>
 
       {/* Google MFA Pairing Modal Dialog */}
       {showPairModal && pairSetupData && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl border border-emerald-500/30 bg-slate-900 shadow-2xl p-6 flex flex-col space-y-4 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5 text-emerald-400">
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.55)' }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl shadow-2xl p-6 flex flex-col space-y-4 my-8 transition-all"
+            style={{
+              backgroundColor: 'var(--dgod-bg-surface)',
+              border: '1px solid var(--dgod-border-strong)',
+              color: 'var(--dgod-text-primary)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            <div
+              className="flex items-center justify-between pb-3 border-b"
+              style={{ borderColor: 'var(--dgod-border)' }}
+            >
+              <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
                 <Smartphone className="w-5 h-5" />
-                <h3 className="text-sm font-bold text-white">Enable Google Authenticator (MFA)</h3>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--dgod-text-primary)' }}>
+                  Enable Google Authenticator (MFA)
+                </h3>
               </div>
               <button
                 onClick={() => setShowPairModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="p-1 transition cursor-pointer"
+                style={{ color: 'var(--dgod-text-muted)' }}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--dgod-text-secondary)' }}>
               Scan this QR code with <strong>Google Authenticator</strong> (or Microsoft Authenticator) on your phone, then enter your master password and the generated 6-digit code.
             </p>
 
             {/* QR Code Canvas */}
             <div className="flex flex-col items-center justify-center py-2 space-y-3">
-              <QrCanvas text={pairSetupData.otpauthUrl} size={160} />
+              <div
+                className="p-3 bg-white rounded-xl shadow-sm border"
+                style={{ borderColor: 'var(--dgod-border)' }}
+              >
+                <QrCanvas text={pairSetupData.otpauthUrl} size={160} />
+              </div>
 
               <div className="w-full space-y-1 text-center">
-                <div className="text-[11px] text-slate-400">Manual secret entry code:</div>
-                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded p-1.5 font-mono text-[11px] text-emerald-300">
+                <div className="text-[11px]" style={{ color: 'var(--dgod-text-secondary)' }}>
+                  Manual secret entry code:
+                </div>
+                <div
+                  className="flex items-center gap-1 rounded p-1.5 font-mono text-[11px]"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)',
+                    color: 'var(--dgod-text-primary)'
+                  }}
+                >
                   <span className="flex-1 truncate select-all">{pairSetupData.secret}</span>
                   <button
                     type="button"
                     onClick={() => handleCopySecret(pairSetupData.secret)}
-                    className="p-1 hover:text-white cursor-pointer"
+                    className="p-1 cursor-pointer"
+                    style={{ color: 'var(--dgod-text-muted)' }}
                     title="Copy secret key"
                   >
-                    {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
@@ -667,7 +850,7 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
 
             <form onSubmit={handlePairSubmit} className="space-y-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                <label className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--dgod-text-primary)' }}>
                   Workstation Master Password
                 </label>
                 <input
@@ -675,13 +858,18 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                   placeholder="Enter your master password..."
                   value={pairPassword}
                   onChange={(e) => setPairPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none transition"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)',
+                    color: 'var(--dgod-text-primary)'
+                  }}
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-emerald-400 mb-1">
+                <label className="block text-[11px] font-semibold mb-1 text-emerald-600 dark:text-emerald-400">
                   6-Digit Authenticator Code
                 </label>
                 <input
@@ -691,21 +879,26 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                   placeholder="000 000"
                   value={pairToken}
                   onChange={(e) => setPairToken(e.target.value.replace(/\D/g, ''))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-center text-sm font-mono tracking-widest text-emerald-300 focus:outline-none focus:border-emerald-500"
+                  className="w-full rounded-lg p-2 text-center text-sm font-mono tracking-widest focus:outline-none transition"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid #10b981',
+                    color: 'var(--dgod-text-primary)'
+                  }}
                   required
                 />
               </div>
 
               {pairError && (
-                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>{pairError}</span>
                 </div>
               )}
 
               {pairSuccess && (
-                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 dark:text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>Google MFA successfully activated! Signing in...</span>
                 </div>
               )}
@@ -714,14 +907,22 @@ export const AppLoginModal: React.FC<AppLoginModalProps> = ({ onAuthenticated })
                 <button
                   type="button"
                   onClick={() => setShowPairModal(false)}
-                  className="flex-1 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                  className="flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition cursor-pointer"
+                  style={{
+                    backgroundColor: 'var(--dgod-bg-sidebar)',
+                    border: '1px solid var(--dgod-border-strong)',
+                    color: 'var(--dgod-text-secondary)'
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPairingSubmitting || !pairPassword || pairToken.length !== 6}
-                  className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/30"
+                  className="flex-1 py-2 px-3 rounded-lg text-white text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+                  style={{
+                    backgroundColor: '#10b981'
+                  }}
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>{isPairingSubmitting ? 'Verifying...' : 'Activate Google MFA'}</span>
