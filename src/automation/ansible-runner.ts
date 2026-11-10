@@ -98,6 +98,8 @@ export interface ParsedTask {
   become?: boolean;
   defaultChanged?: boolean;
   sampleResult?: (target: TargetHost, healthy: boolean) => Record<string, any>;
+  changed_when?: any;
+  when?: any;
 }
 
 interface TargetSession {
@@ -437,15 +439,65 @@ export class AnsibleRunner {
     });
   }
 
+  private interpolateVariables(val: any, vars: Record<string, any>): any {
+    if (typeof val === 'string') {
+      return val.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expr) => {
+        const rawExpr = expr.trim();
+        // 1. Password hash filter: plain_password | password_hash('sha512'...)
+        const hashMatch = rawExpr.match(/^([a-zA-Z0-9_]+)\s*\|\s*password_hash\([^)]*\)/);
+        if (hashMatch) {
+          const varName = hashMatch[1];
+          if (vars[varName] !== undefined) {
+            return String(vars[varName]);
+          }
+        }
+        // 2. Filter: var_name | trim
+        const trimMatch = rawExpr.match(/^([a-zA-Z0-9_]+)\s*\|\s*trim/);
+        if (trimMatch) {
+          const varName = trimMatch[1];
+          return String(vars[varName] ?? '').trim();
+        }
+        // 3. Direct variable lookup
+        if (vars[rawExpr] !== undefined) {
+          return String(vars[rawExpr]);
+        }
+        return _match;
+      });
+    }
+    if (Array.isArray(val)) {
+      return val.map((item) => this.interpolateVariables(item, vars));
+    }
+    if (val && typeof val === 'object' && val !== null) {
+      const result: Record<string, any> = {};
+      for (const k of Object.keys(val)) {
+        result[k] = this.interpolateVariables(val[k], vars);
+      }
+      return result;
+    }
+    return val;
+  }
+
   private async executeTaskOnHost(
     session: TargetSession,
     task: ParsedTask,
     req: AutomationExecutionRequest
   ): Promise<{ status: 'ok' | 'changed' | 'failed'; payload: Record<string, any> }> {
-    const mod = (task.module || '').toLowerCase();
+    const rawMod = (task.module || '').toLowerCase();
+    const mod = rawMod.replace(/^(ansible\.builtin\.|ansible\.legacy\.|ansible\.posix\.|community\.general\.)/, '');
     const become = Boolean(task.become ?? req.become ?? true);
 
     try {
+      // 0. Conditional check (when:)
+      if (task.when !== undefined && task.when !== null) {
+        const wStr = String(task.when).trim().toLowerCase();
+        if (wStr === 'false' || wStr === '0' || wStr === 'no') {
+          return {
+            status: 'ok',
+            payload: { changed: false, skipped: true, msg: `Skipped: conditional check (${task.when}) evaluated to false` }
+          };
+        }
+      }
+
       // 1. Facts Gathering / setup
       if (mod === 'setup' || task.name.toLowerCase().includes('gathering facts')) {
         const factScript = `
@@ -509,19 +561,35 @@ echo "FACT:discovered_interpreter_python:$PY"
 
       // 2. User management
       if (mod === 'user') {
-        const username = task.args.name || task.args._raw;
+        const username = task.args.name || task.args.user || task.args._raw;
         if (!username) {
           return { status: 'failed', payload: { failed: true, msg: 'User task missing parameter: name' } };
         }
         const state = task.args.state || 'present';
         const shell = task.args.shell || '/bin/bash';
-        const groups = task.args.groups || '';
+        const comment = (task.args.comment || task.args.gecos || '').replace(/"/g, '\\"');
+        const home = task.args.home || '';
+        const createHome =
+          task.args.create_home !== false &&
+          task.args.createhome !== false &&
+          String(task.args.create_home).toLowerCase() !== 'false' &&
+          String(task.args.create_home).toLowerCase() !== 'no';
+        const groups = Array.isArray(task.args.groups)
+          ? task.args.groups.join(',')
+          : String(task.args.groups || '').replace(/\s+/g, '');
+        const password = task.args.password || '';
+        const updatePassword = task.args.update_password || 'always';
 
         const userScript = `
 TARGET_USER="${username}"
 STATE="${state}"
 USER_SHELL="${shell}"
+USER_COMMENT="${comment}"
+USER_HOME="${home}"
+CREATE_HOME="${createHome ? 'true' : 'false'}"
 USER_GROUPS="${groups}"
+USER_PASS="${password.replace(/"/g, '\\"')}"
+UPDATE_PASS="${updatePassword}"
 
 if [ "$STATE" = "absent" ]; then
   if id -u "$TARGET_USER" >/dev/null 2>&1; then
@@ -531,27 +599,75 @@ if [ "$STATE" = "absent" ]; then
     echo "TASK_RESULT:OK:User $TARGET_USER does not exist."
   fi
 else
+  CHANGED=0
   if ! id -u "$TARGET_USER" >/dev/null 2>&1; then
-    CREATE_ARGS="-m -s $USER_SHELL"
+    CREATE_ARGS="-s $USER_SHELL"
+    if [ "$CREATE_HOME" = "true" ]; then
+      CREATE_ARGS="$CREATE_ARGS -m"
+    fi
+    if [ -n "$USER_HOME" ]; then
+      CREATE_ARGS="$CREATE_ARGS -d $USER_HOME"
+    fi
+    if [ -n "$USER_COMMENT" ]; then
+      CREATE_ARGS="$CREATE_ARGS -c \"$USER_COMMENT\""
+    fi
     if [ -n "$USER_GROUPS" ]; then
+      for g in $(echo "$USER_GROUPS" | tr ',' ' '); do
+        if [ -n "$g" ]; then
+          getent group "$g" >/dev/null 2>&1 || groupadd "$g" 2>/dev/null || true
+        fi
+      done
       CREATE_ARGS="$CREATE_ARGS -G $USER_GROUPS"
     fi
     useradd $CREATE_ARGS "$TARGET_USER"
-    echo "TASK_RESULT:CHANGED:Created user $TARGET_USER with groups $USER_GROUPS."
+    CHANGED=1
+
+    if [ -n "$USER_PASS" ]; then
+      if echo "$USER_PASS" | grep -q '^\$[0-9a-zA-Z]\+\$'; then
+        usermod -p "$USER_PASS" "$TARGET_USER" 2>/dev/null || echo "$TARGET_USER:$USER_PASS" | chpasswd -e
+      else
+        echo "$TARGET_USER:$USER_PASS" | chpasswd
+      fi
+    fi
+    echo "TASK_RESULT:CHANGED:Created user $TARGET_USER."
   else
-    CHANGED=0
+    if [ -n "$USER_SHELL" ]; then
+      CURRENT_SHELL=$(getent passwd "$TARGET_USER" | cut -d: -f7)
+      if [ "$CURRENT_SHELL" != "$USER_SHELL" ]; then
+        usermod -s "$USER_SHELL" "$TARGET_USER"
+        CHANGED=1
+      fi
+    fi
+    if [ -n "$USER_COMMENT" ]; then
+      CURRENT_GECOS=$(getent passwd "$TARGET_USER" | cut -d: -f5)
+      if [ "$CURRENT_GECOS" != "$USER_COMMENT" ]; then
+        usermod -c "$USER_COMMENT" "$TARGET_USER"
+        CHANGED=1
+      fi
+    fi
     if [ -n "$USER_GROUPS" ]; then
       for g in $(echo "$USER_GROUPS" | tr ',' ' '); do
-        if ! id -nG "$TARGET_USER" | grep -qw "$g"; then
-          usermod -aG "$g" "$TARGET_USER"
-          CHANGED=1
+        if [ -n "$g" ]; then
+          getent group "$g" >/dev/null 2>&1 || groupadd "$g" 2>/dev/null || true
+          if ! id -nG "$TARGET_USER" | grep -qw "$g"; then
+            usermod -aG "$g" "$TARGET_USER"
+            CHANGED=1
+          fi
         fi
       done
     fi
+    if [ -n "$USER_PASS" ] && [ "$UPDATE_PASS" != "on_create" ]; then
+      if echo "$USER_PASS" | grep -q '^\$[0-9a-zA-Z]\+\$'; then
+        usermod -p "$USER_PASS" "$TARGET_USER" 2>/dev/null || echo "$TARGET_USER:$USER_PASS" | chpasswd -e
+      else
+        echo "$TARGET_USER:$USER_PASS" | chpasswd
+      fi
+      CHANGED=1
+    fi
     if [ "$CHANGED" -eq 1 ]; then
-      echo "TASK_RESULT:CHANGED:Added user $TARGET_USER to groups $USER_GROUPS."
+      echo "TASK_RESULT:CHANGED:Updated user $TARGET_USER configuration."
     else
-      echo "TASK_RESULT:OK:User $TARGET_USER already exists and is configured."
+      echo "TASK_RESULT:OK:User $TARGET_USER is already up to date."
     fi
   fi
 fi
@@ -570,10 +686,11 @@ fi
         }
 
         const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
-        const cleanMsg = res.stdout
-          .split('\n')
-          .find((l) => l.startsWith('TASK_RESULT:'))
-          ?.replace(/^TASK_RESULT:(CHANGED|OK):/, '') || `Task [${task.name}] executed successfully.`;
+        const cleanMsg =
+          res.stdout
+            .split('\n')
+            .find((l) => l.startsWith('TASK_RESULT:'))
+            ?.replace(/^TASK_RESULT:(CHANGED|OK):/, '') || `Task [${task.name}] executed successfully.`;
 
         return {
           status: isChanged ? 'changed' : 'ok',
@@ -588,7 +705,42 @@ fi
         };
       }
 
-      // 3. Line In File
+      // 3. Group management
+      if (mod === 'group') {
+        const groupName = task.args.name || task.args._raw;
+        if (!groupName) {
+          return { status: 'failed', payload: { failed: true, msg: 'Group task missing parameter: name' } };
+        }
+        const state = task.args.state || 'present';
+        const gid = task.args.gid ? `-g ${task.args.gid}` : '';
+        const groupScript = `
+TARGET_GROUP="${groupName}"
+STATE="${state}"
+if [ "$STATE" = "absent" ]; then
+  if getent group "$TARGET_GROUP" >/dev/null 2>&1; then
+    groupdel "$TARGET_GROUP"
+    echo "TASK_RESULT:CHANGED:Group $TARGET_GROUP removed."
+  else
+    echo "TASK_RESULT:OK:Group $TARGET_GROUP does not exist."
+  fi
+else
+  if ! getent group "$TARGET_GROUP" >/dev/null 2>&1; then
+    groupadd ${gid} "$TARGET_GROUP"
+    echo "TASK_RESULT:CHANGED:Group $TARGET_GROUP created."
+  else
+    echo "TASK_RESULT:OK:Group $TARGET_GROUP already exists."
+  fi
+fi
+`;
+        const res = await this.execScriptOnSession(session, groupScript, become);
+        if (res.rc !== 0) {
+          return { status: 'failed', payload: { failed: true, rc: res.rc, msg: res.stderr || res.stdout } };
+        }
+        const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
+        return { status: isChanged ? 'changed' : 'ok', payload: { changed: isChanged, name: groupName, rc: 0 } };
+      }
+
+      // 4. Line In File
       if (mod === 'lineinfile') {
         const filePath = task.args.path || task.args.dest;
         const line = task.args.line || '';
@@ -634,10 +786,11 @@ fi
         }
 
         const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
-        const cleanMsg = res.stdout
-          .split('\n')
-          .find((l) => l.startsWith('TASK_RESULT:'))
-          ?.replace(/^TASK_RESULT:(CHANGED|OK):/, '') || `Task [${task.name}] executed.`;
+        const cleanMsg =
+          res.stdout
+            .split('\n')
+            .find((l) => l.startsWith('TASK_RESULT:'))
+            ?.replace(/^TASK_RESULT:(CHANGED|OK):/, '') || `Task [${task.name}] executed.`;
 
         return {
           status: isChanged ? 'changed' : 'ok',
@@ -650,7 +803,7 @@ fi
         };
       }
 
-      // 4. Command / Shell
+      // 5. Command / Shell / Raw
       if (mod === 'command' || mod === 'shell' || mod === 'raw') {
         const cmd = task.args.cmd || task.args._raw || req.command || '';
         if (!cmd) {
@@ -670,10 +823,19 @@ fi
           };
         }
 
+        let isChanged = true;
+        if (task.changed_when !== undefined) {
+          if (task.changed_when === false || String(task.changed_when).toLowerCase() === 'false') {
+            isChanged = false;
+          } else if (task.changed_when === true || String(task.changed_when).toLowerCase() === 'true') {
+            isChanged = true;
+          }
+        }
+
         return {
-          status: 'changed',
+          status: isChanged ? 'changed' : 'ok',
           payload: {
-            changed: true,
+            changed: isChanged,
             cmd,
             rc: 0,
             stdout: res.stdout,
@@ -682,8 +844,8 @@ fi
         };
       }
 
-      // 5. File / Directory / Permissions
-      if (mod === 'file' || mod === 'stat') {
+      // 6. File / Directory / Permissions
+      if (mod === 'file') {
         const pathVal = task.args.path || task.args.dest;
         const state = task.args.state || 'file';
         const mode = task.args.mode;
@@ -714,7 +876,97 @@ echo "TASK_RESULT:CHANGED:File state ensured."
         };
       }
 
-      // 6. Generic Service or UFW
+      // 7. Stat
+      if (mod === 'stat') {
+        const pathVal = task.args.path || task.args.dest;
+        const statScript = `
+if [ -e "${pathVal}" ]; then
+  echo "TASK_RESULT:OK:File exists: ${pathVal}"
+else
+  echo "TASK_RESULT:FAILED:File does not exist: ${pathVal}"
+  exit 1
+fi
+`;
+        const res = await this.execScriptOnSession(session, statScript, false);
+        return {
+          status: res.rc === 0 ? 'ok' : 'failed',
+          payload: {
+            changed: false,
+            rc: res.rc,
+            path: pathVal,
+            exists: res.rc === 0
+          }
+        };
+      }
+
+      // 8. Package Management (package, apt, yum, dnf)
+      if (['package', 'apt', 'yum', 'dnf'].includes(mod)) {
+        const pkgName = task.args.name || task.args.pkg || task.args._raw || '';
+        if (!pkgName) {
+          return { status: 'failed', payload: { failed: true, msg: 'Package task missing parameter: name' } };
+        }
+        const state = task.args.state || 'present';
+        const pkgScript = `
+PKG="${pkgName}"
+STATE="${state}"
+MGR="apt-get"
+if command -v dnf >/dev/null 2>&1; then
+  MGR="dnf"
+elif command -v yum >/dev/null 2>&1; then
+  MGR="yum"
+elif command -v apt-get >/dev/null 2>&1; then
+  MGR="apt-get"
+fi
+
+if [ "$STATE" = "absent" ]; then
+  if $MGR list installed "$PKG" 2>/dev/null | grep -q "$PKG"; then
+    $MGR remove -y "$PKG"
+    echo "TASK_RESULT:CHANGED:Package $PKG removed."
+  else
+    echo "TASK_RESULT:OK:Package $PKG not installed."
+  fi
+else
+  $MGR install -y "$PKG"
+  echo "TASK_RESULT:CHANGED:Package $PKG installed/updated."
+fi
+`;
+        const res = await this.execScriptOnSession(session, pkgScript, become);
+        if (res.rc !== 0) {
+          return { status: 'failed', payload: { failed: true, rc: res.rc, msg: res.stderr || res.stdout } };
+        }
+        const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
+        return { status: isChanged ? 'changed' : 'ok', payload: { changed: isChanged, name: pkgName, rc: 0 } };
+      }
+
+      // 9. Copy / Template
+      if (mod === 'copy' || mod === 'template') {
+        const dest = task.args.dest || task.args.path;
+        if (!dest) {
+          return { status: 'failed', payload: { failed: true, msg: 'Copy task missing parameter: dest' } };
+        }
+        const content = task.args.content || '';
+        const mode = task.args.mode || '';
+        const owner = task.args.owner || '';
+        const group = task.args.group || '';
+        const b64 = Buffer.from(content, 'utf8').toString('base64');
+        const copyScript = `
+DEST="${dest}"
+DIR=$(dirname "$DEST")
+mkdir -p "$DIR"
+echo "${b64}" | base64 -d > "$DEST"
+if [ -n "${mode}" ]; then chmod "${mode}" "$DEST"; fi
+if [ -n "${owner}" ]; then chown "${owner}" "$DEST"; fi
+if [ -n "${group}" ]; then chgrp "${group}" "$DEST"; fi
+echo "TASK_RESULT:CHANGED:File copied to $DEST."
+`;
+        const res = await this.execScriptOnSession(session, copyScript, become);
+        if (res.rc !== 0) {
+          return { status: 'failed', payload: { failed: true, rc: res.rc, msg: res.stderr || res.stdout } };
+        }
+        return { status: 'changed', payload: { changed: true, dest, rc: 0 } };
+      }
+
+      // 10. Generic Service, Systemd, or UFW
       if (mod === 'service' || mod === 'systemd' || mod === 'ufw') {
         let cmd = '';
         if (mod === 'service' || mod === 'systemd') {
@@ -735,7 +987,7 @@ echo "TASK_RESULT:CHANGED:File state ensured."
         };
       }
 
-      // Fallback: execute sampleResult if defined or simple success
+      // Fallback: execute sampleResult if defined
       if (task.sampleResult) {
         const payload = task.sampleResult(session.target, true);
         return {
@@ -744,12 +996,13 @@ echo "TASK_RESULT:CHANGED:File state ensured."
         };
       }
 
+      // If module is not recognized, report clear error so operator is aware
       return {
-        status: 'ok',
+        status: 'failed',
         payload: {
-          changed: false,
-          msg: `Task [${task.name}] applied successfully.`,
-          rc: 0
+          failed: true,
+          rc: 1,
+          msg: `Unsupported Ansible module: "${task.module}". Supported modules: user, group, command, shell, lineinfile, file, stat, service, systemd, package, apt, yum, dnf, copy, template, setup, ufw.`
         }
       };
     } catch (err: any) {
@@ -1302,6 +1555,107 @@ echo "TASK_RESULT:CHANGED:File state ensured."
     }
 
     if (content) {
+      // Primary: Full YAML standard parser
+      try {
+        const yaml = require('js-yaml');
+        const loaded = yaml.load(content);
+        if (loaded && (Array.isArray(loaded) ? loaded.length > 0 : typeof loaded === 'object')) {
+          const play = Array.isArray(loaded) ? loaded[0] : loaded;
+          const playName = play.name ? String(play.name).trim() : 'Custom Fleet Automation';
+          const playBecome = Boolean(play.become ?? req.become ?? true);
+          const playVars: Record<string, any> = {
+            ...(play.vars || {}),
+            ...(req.extraVars || {})
+          };
+
+          const tasks: ParsedTask[] = [];
+
+          const gatherFacts =
+            play.gather_facts !== false &&
+            play.gather_facts !== 'no' &&
+            play.gather_facts !== 'false' &&
+            play.gather_facts !== 'False';
+          if (gatherFacts) {
+            tasks.push({
+              name: 'Gathering Facts',
+              module: 'setup',
+              args: {},
+              defaultChanged: false
+            });
+          }
+
+          const rawTasks: any[] = Array.isArray(play.tasks) ? play.tasks : [];
+          const reserved = new Set([
+            'name',
+            'become',
+            'become_user',
+            'when',
+            'changed_when',
+            'failed_when',
+            'register',
+            'ignore_errors',
+            'vars',
+            'loop',
+            'with_items',
+            'notify',
+            'tags',
+            'args',
+            'environment',
+            'delegate_to',
+            'check_mode'
+          ]);
+
+          for (const rawTask of rawTasks) {
+            if (!rawTask || typeof rawTask !== 'object') continue;
+
+            let foundMod: string | null = null;
+            let rawArgs: any = {};
+
+            for (const key of Object.keys(rawTask)) {
+              if (!reserved.has(key)) {
+                foundMod = key;
+                rawArgs = rawTask[key];
+                break;
+              }
+            }
+
+            if (!foundMod) continue;
+
+            const normMod = foundMod
+              .replace(/^(ansible\.builtin\.|ansible\.legacy\.|ansible\.posix\.|community\.general\.)/, '')
+              .toLowerCase();
+
+            const taskVars = { ...playVars, ...(rawTask.vars || {}) };
+
+            let parsedArgs: Record<string, any> = {};
+            if (typeof rawArgs === 'string') {
+              parsedArgs = { cmd: rawArgs, _raw: rawArgs };
+            } else if (rawArgs && typeof rawArgs === 'object') {
+              parsedArgs = { ...rawArgs };
+            }
+
+            parsedArgs = this.interpolateVariables(parsedArgs, taskVars);
+            const taskName = this.interpolateVariables(rawTask.name || normMod, taskVars);
+
+            tasks.push({
+              name: taskName,
+              module: normMod,
+              args: parsedArgs,
+              become: rawTask.become ?? playBecome,
+              changed_when: rawTask.changed_when,
+              when: rawTask.when
+            });
+          }
+
+          if (tasks.length > 0) {
+            return { playName, tasks };
+          }
+        }
+      } catch (yamlErr) {
+        console.warn('[AnsibleRunner] Standard YAML parsing failed, using line fallback:', yamlErr);
+      }
+
+      // Fallback: Legacy line parser
       let playName = 'Custom Fleet Automation';
       let playBecome = Boolean(req.become ?? false);
 
@@ -1361,9 +1715,10 @@ echo "TASK_RESULT:CHANGED:File state ensured."
               continue;
             }
 
-            const modHeaderMatch = rawLine.match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)$/);
+            const modHeaderMatch = rawLine.match(/^\s*([a-zA-Z0-9_\.]+)\s*:\s*(.*)$/);
             if (modHeaderMatch) {
-              const key = modHeaderMatch[1];
+              const rawKey = modHeaderMatch[1];
+              const key = rawKey.replace(/^(ansible\.builtin\.|ansible\.legacy\.|ansible\.posix\.|community\.general\.)/, '');
               const val = modHeaderMatch[2].trim();
               const reserved = [
                 'name',
@@ -1375,7 +1730,9 @@ echo "TASK_RESULT:CHANGED:File state ensured."
                 'vars',
                 'with_items',
                 'loop',
-                'args'
+                'args',
+                'changed_when',
+                'failed_when'
               ];
               if (!reserved.includes(key) && !currentModule) {
                 currentModule = key;
