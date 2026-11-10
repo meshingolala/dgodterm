@@ -593,7 +593,11 @@ UPDATE_PASS="${updatePassword}"
 
 if [ "$STATE" = "absent" ]; then
   if id -u "$TARGET_USER" >/dev/null 2>&1; then
-    userdel -r "$TARGET_USER"
+    DEL_ERR=$(userdel -r "$TARGET_USER" 2>&1)
+    if [ $? -ne 0 ]; then
+      echo "TASK_RESULT:FAILED:userdel failed: $DEL_ERR"
+      exit 1
+    fi
     echo "TASK_RESULT:CHANGED:User $TARGET_USER removed."
   else
     echo "TASK_RESULT:OK:User $TARGET_USER does not exist."
@@ -601,15 +605,18 @@ if [ "$STATE" = "absent" ]; then
 else
   CHANGED=0
   if ! id -u "$TARGET_USER" >/dev/null 2>&1; then
-    CREATE_ARGS="-s $USER_SHELL"
+    ARGS=()
+    if [ -n "$USER_SHELL" ]; then
+      ARGS+=("-s" "$USER_SHELL")
+    fi
     if [ "$CREATE_HOME" = "true" ]; then
-      CREATE_ARGS="$CREATE_ARGS -m"
+      ARGS+=("-m")
     fi
     if [ -n "$USER_HOME" ]; then
-      CREATE_ARGS="$CREATE_ARGS -d $USER_HOME"
+      ARGS+=("-d" "$USER_HOME")
     fi
     if [ -n "$USER_COMMENT" ]; then
-      CREATE_ARGS="$CREATE_ARGS -c \"$USER_COMMENT\""
+      ARGS+=("-c" "$USER_COMMENT")
     fi
     if [ -n "$USER_GROUPS" ]; then
       for g in $(echo "$USER_GROUPS" | tr ',' ' '); do
@@ -617,31 +624,57 @@ else
           getent group "$g" >/dev/null 2>&1 || groupadd "$g" 2>/dev/null || true
         fi
       done
-      CREATE_ARGS="$CREATE_ARGS -G $USER_GROUPS"
+      ARGS+=("-G" "$USER_GROUPS")
     fi
-    useradd $CREATE_ARGS "$TARGET_USER"
+
+    ADD_ERR=$(useradd "\${ARGS[@]}" "$TARGET_USER" 2>&1)
+    ADD_RC=$?
+    if [ $ADD_RC -ne 0 ]; then
+      echo "TASK_RESULT:FAILED:useradd failed (rc=$ADD_RC): $ADD_ERR"
+      exit 1
+    fi
     CHANGED=1
 
     if [ -n "$USER_PASS" ]; then
       if echo "$USER_PASS" | grep -q '^\$[0-9a-zA-Z]\+\$'; then
-        usermod -p "$USER_PASS" "$TARGET_USER" 2>/dev/null || echo "$TARGET_USER:$USER_PASS" | chpasswd -e
+        PASS_ERR=$(printf '%s:%s\\n' "$TARGET_USER" "$USER_PASS" | chpasswd -e 2>&1 || usermod -p "$USER_PASS" "$TARGET_USER" 2>&1)
       else
-        echo "$TARGET_USER:$USER_PASS" | chpasswd
+        PASS_ERR=$(printf '%s:%s\\n' "$TARGET_USER" "$USER_PASS" | chpasswd 2>&1)
+      fi
+      PASS_RC=$?
+      if [ $PASS_RC -ne 0 ]; then
+        echo "TASK_RESULT:FAILED:Failed to set user password (rc=$PASS_RC): $PASS_ERR"
+        exit 1
       fi
     fi
+
+    # Verification: Ensure user exists in passwd database
+    if ! id -u "$TARGET_USER" >/dev/null 2>&1; then
+      echo "TASK_RESULT:FAILED:Verification failed - user $TARGET_USER does not exist in /etc/passwd after useradd"
+      exit 1
+    fi
+
     echo "TASK_RESULT:CHANGED:Created user $TARGET_USER."
   else
     if [ -n "$USER_SHELL" ]; then
       CURRENT_SHELL=$(getent passwd "$TARGET_USER" | cut -d: -f7)
       if [ "$CURRENT_SHELL" != "$USER_SHELL" ]; then
-        usermod -s "$USER_SHELL" "$TARGET_USER"
+        MOD_ERR=$(usermod -s "$USER_SHELL" "$TARGET_USER" 2>&1)
+        if [ $? -ne 0 ]; then
+          echo "TASK_RESULT:FAILED:Failed to update shell: $MOD_ERR"
+          exit 1
+        fi
         CHANGED=1
       fi
     fi
     if [ -n "$USER_COMMENT" ]; then
       CURRENT_GECOS=$(getent passwd "$TARGET_USER" | cut -d: -f5)
       if [ "$CURRENT_GECOS" != "$USER_COMMENT" ]; then
-        usermod -c "$USER_COMMENT" "$TARGET_USER"
+        MOD_ERR=$(usermod -c "$USER_COMMENT" "$TARGET_USER" 2>&1)
+        if [ $? -ne 0 ]; then
+          echo "TASK_RESULT:FAILED:Failed to update comment: $MOD_ERR"
+          exit 1
+        fi
         CHANGED=1
       fi
     fi
@@ -649,8 +682,12 @@ else
       for g in $(echo "$USER_GROUPS" | tr ',' ' '); do
         if [ -n "$g" ]; then
           getent group "$g" >/dev/null 2>&1 || groupadd "$g" 2>/dev/null || true
-          if ! id -nG "$TARGET_USER" | grep -qw "$g"; then
-            usermod -aG "$g" "$TARGET_USER"
+          if ! id -nG "$TARGET_USER" 2>/dev/null | grep -qw "$g"; then
+            MOD_ERR=$(usermod -aG "$g" "$TARGET_USER" 2>&1)
+            if [ $? -ne 0 ]; then
+              echo "TASK_RESULT:FAILED:Failed to add to group $g: $MOD_ERR"
+              exit 1
+            fi
             CHANGED=1
           fi
         fi
@@ -658,12 +695,17 @@ else
     fi
     if [ -n "$USER_PASS" ] && [ "$UPDATE_PASS" != "on_create" ]; then
       if echo "$USER_PASS" | grep -q '^\$[0-9a-zA-Z]\+\$'; then
-        usermod -p "$USER_PASS" "$TARGET_USER" 2>/dev/null || echo "$TARGET_USER:$USER_PASS" | chpasswd -e
+        PASS_ERR=$(printf '%s:%s\\n' "$TARGET_USER" "$USER_PASS" | chpasswd -e 2>&1 || usermod -p "$USER_PASS" "$TARGET_USER" 2>&1)
       else
-        echo "$TARGET_USER:$USER_PASS" | chpasswd
+        PASS_ERR=$(printf '%s:%s\\n' "$TARGET_USER" "$USER_PASS" | chpasswd 2>&1)
+      fi
+      if [ $? -ne 0 ]; then
+        echo "TASK_RESULT:FAILED:Failed to update password: $PASS_ERR"
+        exit 1
       fi
       CHANGED=1
     fi
+
     if [ "$CHANGED" -eq 1 ]; then
       echo "TASK_RESULT:CHANGED:Updated user $TARGET_USER configuration."
     else
@@ -673,13 +715,19 @@ else
 fi
 `;
         const res = await this.execScriptOnSession(session, userScript, become);
-        if (res.rc !== 0) {
+        const failedLine = res.stdout.split('\n').find((l) => l.startsWith('TASK_RESULT:FAILED:'));
+        if (res.rc !== 0 || failedLine) {
+          const failMsg =
+            failedLine?.replace(/^TASK_RESULT:FAILED:/, '') ||
+            res.stderr ||
+            res.stdout ||
+            'User management command failed';
           return {
             status: 'failed',
             payload: {
               failed: true,
-              rc: res.rc,
-              msg: res.stderr || res.stdout || 'User management command failed',
+              rc: res.rc !== 0 ? res.rc : 1,
+              msg: failMsg,
               name: username
             }
           };
