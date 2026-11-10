@@ -103,6 +103,8 @@ export interface AutomationRunManifest {
     max_run_minutes: number;
   };
   change_reference: string | null;
+  check_mode?: boolean;
+  dry_run?: boolean;
   started_at: string | null;
   completed_at: string | null;
   per_host_results: Record<

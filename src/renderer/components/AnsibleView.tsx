@@ -237,6 +237,7 @@ export const AnsibleView: React.FC = () => {
   const [sudoPassword, setSudoPassword] = useState('');
   const [showSudoPassword, setShowSudoPassword] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
 
   // Active Policy & State
   const [activePolicy, setActivePolicy] = useState<any>(null);
@@ -609,8 +610,12 @@ export const AnsibleView: React.FC = () => {
   };
 
   // Execution Trigger
-  const handleStartRun = async (overrideCreds?: { password?: string; becomePassword?: string }) => {
+  const handleStartRun = async (
+    overrideCreds?: { password?: string; becomePassword?: string },
+    isDryRunOverride?: boolean
+  ) => {
     setErrorBanner('');
+    const isDryRunActive = isDryRunOverride !== undefined ? isDryRunOverride : dryRun;
 
     if (targets.length === 0) {
       setErrorBanner('Please select or add at least one Target Host before executing.');
@@ -685,6 +690,8 @@ export const AnsibleView: React.FC = () => {
       requesterId: requesterId.trim() || 'lead-ops-user',
       approvals,
       become: elevateSudo,
+      checkMode: isDryRunActive,
+      dryRun: isDryRunActive,
       defaultPassword: effPass || undefined,
       becomePassword: effBecome || undefined,
       rolloutConfig: {
@@ -1631,8 +1638,46 @@ export const AnsibleView: React.FC = () => {
               )}
             </div>
 
-            {/* Action Trigger Button */}
-            <div className="pt-2">
+            {/* Dry Run / Check Mode Toggle */}
+            <div className="border-t border-slate-800/80 pt-2.5 pb-1">
+              <label className={`flex items-center justify-between p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                dryRun
+                  ? 'bg-cyan-950/40 border-cyan-500/50 shadow-sm shadow-cyan-950'
+                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-1.5 rounded-lg transition ${
+                    dryRun ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-800/80 text-slate-400'
+                  }`}>
+                    <Eye className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      Dry Run (Check Mode)
+                      <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                        dryRun
+                          ? 'bg-cyan-900/60 text-cyan-300 border-cyan-700/60'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}>
+                        --check
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Simulate playbook tasks safely with zero changes committed
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={dryRun}
+                  onChange={(e) => setDryRun(e.target.checked)}
+                  className="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500/40 w-4 h-4 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            {/* Action Trigger Buttons */}
+            <div className="pt-1 flex flex-col gap-1.5">
               {executing ? (
                 <button
                   onClick={handleCancelRun}
@@ -1641,23 +1686,49 @@ export const AnsibleView: React.FC = () => {
                   <StopCircle className="w-4 h-4" />
                   Abort Execution Now
                 </button>
-              ) : (
+              ) : dryRun ? (
                 <button
-                  onClick={handleStartRun}
+                  onClick={() => handleStartRun()}
                   disabled={targets.length === 0}
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition shadow-lg ${
                     targets.length === 0
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : environment === 'production'
-                      ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
+                      : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/30'
                   }`}
                 >
-                  <Play className="w-4 h-4" />
+                  <Eye className="w-4 h-4" />
                   {execMode === 'command'
-                    ? `Launch Fleet Command on ${targets.length} Hosts`
-                    : `Trigger Playbook on ${targets.length} Hosts`}
+                    ? `Simulate Fleet Command (Dry Run) on ${targets.length} Hosts`
+                    : `Simulate Playbook (Dry Run) on ${targets.length} Hosts`}
                 </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleStartRun()}
+                    disabled={targets.length === 0}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition shadow-lg ${
+                      targets.length === 0
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        : environment === 'production'
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
+                    }`}
+                  >
+                    <Play className="w-4 h-4" />
+                    {execMode === 'command'
+                      ? `Launch Fleet Command on ${targets.length} Hosts`
+                      : `Trigger Playbook on ${targets.length} Hosts`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStartRun(undefined, true)}
+                    disabled={targets.length === 0}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-cyan-400 bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/50 hover:border-cyan-700 transition"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Test Playbook First (Dry Run Simulation)
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1802,16 +1873,33 @@ export const AnsibleView: React.FC = () => {
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   {executing ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                    <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold animate-pulse ${
+                      dryRun
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                    }`}>
+                      <Loader2 className={`w-3.5 h-3.5 animate-spin ${dryRun ? 'text-cyan-400' : 'text-sky-400'}`} />
                       {currentTaskInfo
-                        ? `TASK [${currentTaskInfo.index}/${currentTaskInfo.total}]: ${currentTaskInfo.name}`
-                        : 'Executing tasks...'}
+                        ? `${dryRun ? '[DRY RUN] ' : ''}TASK [${currentTaskInfo.index}/${currentTaskInfo.total}]: ${currentTaskInfo.name}`
+                        : dryRun ? 'Simulating tasks (Check Mode)...' : 'Executing tasks...'}
                     </span>
                   ) : progressPercent === 100 ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      Execution Finished (100%)
+                    <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      completedManifest?.dry_run || completedManifest?.check_mode
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {completedManifest?.dry_run || completedManifest?.check_mode ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                          Dry Run Simulation Finished (100%)
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          Execution Finished (100%)
+                        </>
+                      )}
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60">
@@ -2219,12 +2307,14 @@ export const AnsibleView: React.FC = () => {
                     setShowAuthModal(false);
                     const effPass = sshPassword;
                     const effBecome = sudoSameAsSsh ? effPass : sudoPassword;
-                    handleStartRun({ password: effPass, becomePassword: effBecome });
+                    handleStartRun({ password: effPass, becomePassword: effBecome }, dryRun);
                   }}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-2"
+                  className={`px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 ${
+                    dryRun ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-indigo-600 hover:bg-indigo-500'
+                  }`}
                 >
-                  <Play className="w-4 h-4" />
-                  Authenticate & Run Playbook
+                  {dryRun ? <Eye className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  {dryRun ? 'Authenticate & Simulate (Dry Run)' : 'Authenticate & Run Playbook'}
                 </button>
               </div>
             </div>

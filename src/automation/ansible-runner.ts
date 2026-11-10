@@ -35,6 +35,8 @@ export interface AutomationExecutionRequest {
   defaultPassword?: string;
   becomePassword?: string;
   become?: boolean;
+  checkMode?: boolean;
+  dryRun?: boolean;
   credentials?: Record<
     string,
     {
@@ -485,15 +487,51 @@ export class AnsibleRunner {
     const rawMod = (task.module || '').toLowerCase();
     const mod = rawMod.replace(/^(ansible\.builtin\.|ansible\.legacy\.|ansible\.posix\.|community\.general\.)/, '');
     const become = Boolean(task.become ?? req.become ?? true);
+    const isDryRun = Boolean(req.checkMode ?? req.dryRun);
 
     try {
       // 0. Conditional check (when:)
       if (task.when !== undefined && task.when !== null) {
-        const wStr = String(task.when).trim().toLowerCase();
-        if (wStr === 'false' || wStr === '0' || wStr === 'no') {
+        const wRaw = String(task.when).trim();
+        const wStr = wRaw.toLowerCase();
+        if (
+          wStr === 'ansible_check_mode is false' ||
+          wStr === 'not ansible_check_mode' ||
+          wStr === 'ansible_check_mode == false'
+        ) {
+          if (isDryRun) {
+            return {
+              status: 'ok',
+              payload: {
+                changed: false,
+                skipped: true,
+                msg: `Skipped in dry run: conditional check (${wRaw}) evaluated to false`
+              }
+            };
+          }
+        } else if (
+          wStr === 'ansible_check_mode is true' ||
+          wStr === 'ansible_check_mode' ||
+          wStr === 'ansible_check_mode == true'
+        ) {
+          if (!isDryRun) {
+            return {
+              status: 'ok',
+              payload: {
+                changed: false,
+                skipped: true,
+                msg: `Skipped: conditional check (${wRaw}) evaluated to false`
+              }
+            };
+          }
+        } else if (wStr === 'false' || wStr === '0' || wStr === 'no') {
           return {
             status: 'ok',
-            payload: { changed: false, skipped: true, msg: `Skipped: conditional check (${task.when}) evaluated to false` }
+            payload: {
+              changed: false,
+              skipped: true,
+              msg: `Skipped: conditional check (${wRaw}) evaluated to false`
+            }
           };
         }
       }
@@ -580,7 +618,59 @@ echo "FACT:discovered_interpreter_python:$PY"
         const password = task.args.password || '';
         const updatePassword = task.args.update_password || 'always';
 
-        const userScript = `
+        const userScript = isDryRun
+          ? `
+TARGET_USER="${username}"
+STATE="${state}"
+USER_SHELL="${shell}"
+USER_COMMENT="${comment}"
+USER_HOME="${home}"
+CREATE_HOME="${createHome ? 'true' : 'false'}"
+USER_GROUPS="${groups}"
+
+if [ "$STATE" = "absent" ]; then
+  if id -u "$TARGET_USER" >/dev/null 2>&1; then
+    echo "TASK_RESULT:CHANGED:[DRY RUN] User '$TARGET_USER' exists and would be deleted."
+  else
+    echo "TASK_RESULT:OK:[DRY RUN] User '$TARGET_USER' does not exist."
+  fi
+else
+  if ! id -u "$TARGET_USER" >/dev/null 2>&1; then
+    echo "TASK_RESULT:CHANGED:[DRY RUN] User '$TARGET_USER' does not exist. Would be created (shell: $USER_SHELL, comment: '$USER_COMMENT', groups: [$USER_GROUPS], create_home: $CREATE_HOME)."
+  else
+    CHANGED=0
+    DIFFS=""
+    if [ -n "$USER_SHELL" ]; then
+      CURR_SHELL=$(getent passwd "$TARGET_USER" | cut -d: -f7)
+      if [ "$CURR_SHELL" != "$USER_SHELL" ]; then
+        CHANGED=1
+        DIFFS="$DIFFS shell($CURR_SHELL -> $USER_SHELL)"
+      fi
+    fi
+    if [ -n "$USER_COMMENT" ]; then
+      CURR_GECOS=$(getent passwd "$TARGET_USER" | cut -d: -f5)
+      if [ "$CURR_GECOS" != "$USER_COMMENT" ]; then
+        CHANGED=1
+        DIFFS="$DIFFS comment"
+      fi
+    fi
+    if [ -n "$USER_GROUPS" ]; then
+      for g in $(echo "$USER_GROUPS" | tr ',' ' '); do
+        if [ -n "$g" ] && ! id -nG "$TARGET_USER" 2>/dev/null | grep -qw "$g"; then
+          CHANGED=1
+          DIFFS="$DIFFS group_add($g)"
+        fi
+      done
+    fi
+    if [ "$CHANGED" -eq 1 ]; then
+      echo "TASK_RESULT:CHANGED:[DRY RUN] User '$TARGET_USER' exists and would be updated:$DIFFS."
+    else
+      echo "TASK_RESULT:OK:[DRY RUN] User '$TARGET_USER' already exists with matching configuration."
+    fi
+  fi
+fi
+`
+          : `
 TARGET_USER="${username}"
 STATE="${state}"
 USER_SHELL="${shell}"
@@ -761,19 +851,39 @@ fi
         }
         const state = task.args.state || 'present';
         const gid = task.args.gid ? `-g ${task.args.gid}` : '';
-        const groupScript = `
+        const groupScript = isDryRun
+          ? `
 TARGET_GROUP="${groupName}"
 STATE="${state}"
 if [ "$STATE" = "absent" ]; then
   if getent group "$TARGET_GROUP" >/dev/null 2>&1; then
-    groupdel "$TARGET_GROUP"
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Group '$TARGET_GROUP' exists and would be deleted."
+  else
+    echo "TASK_RESULT:OK:[DRY RUN] Group '$TARGET_GROUP' does not exist."
+  fi
+else
+  if ! getent group "$TARGET_GROUP" >/dev/null 2>&1; then
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Group '$TARGET_GROUP' does not exist. Would be created."
+  else
+    echo "TASK_RESULT:OK:[DRY RUN] Group '$TARGET_GROUP' already exists."
+  fi
+fi
+`
+          : `
+TARGET_GROUP="${groupName}"
+STATE="${state}"
+if [ "$STATE" = "absent" ]; then
+  if getent group "$TARGET_GROUP" >/dev/null 2>&1; then
+    DEL_ERR=$(groupdel "$TARGET_GROUP" 2>&1)
+    if [ $? -ne 0 ]; then echo "TASK_RESULT:FAILED:groupdel failed: $DEL_ERR"; exit 1; fi
     echo "TASK_RESULT:CHANGED:Group $TARGET_GROUP removed."
   else
     echo "TASK_RESULT:OK:Group $TARGET_GROUP does not exist."
   fi
 else
   if ! getent group "$TARGET_GROUP" >/dev/null 2>&1; then
-    groupadd ${gid} "$TARGET_GROUP"
+    ADD_ERR=$(groupadd ${gid} "$TARGET_GROUP" 2>&1)
+    if [ $? -ne 0 ]; then echo "TASK_RESULT:FAILED:groupadd failed: $ADD_ERR"; exit 1; fi
     echo "TASK_RESULT:CHANGED:Group $TARGET_GROUP created."
   else
     echo "TASK_RESULT:OK:Group $TARGET_GROUP already exists."
@@ -799,7 +909,19 @@ fi
           return { status: 'failed', payload: { failed: true, msg: 'lineinfile missing parameter: path' } };
         }
 
-        const lineScript = `
+        const lineScript = isDryRun
+          ? `
+FILE="${filePath}"
+LINE="${line.replace(/"/g, '\\"')}"
+if [ ! -f "$FILE" ]; then
+  echo "TASK_RESULT:CHANGED:[DRY RUN] File '$FILE' does not exist. Would be created with line."
+elif grep -Fxq "$LINE" "$FILE" 2>/dev/null; then
+  echo "TASK_RESULT:OK:[DRY RUN] Line already exists in '$FILE'."
+else
+  echo "TASK_RESULT:CHANGED:[DRY RUN] Line would be appended to '$FILE'."
+fi
+`
+          : `
 FILE="${filePath}"
 LINE="${line.replace(/"/g, '\\"')}"
 MODE="${mode}"
@@ -857,6 +979,20 @@ fi
         if (!cmd) {
           return { status: 'failed', payload: { failed: true, msg: 'Missing command argument' } };
         }
+        if (isDryRun && task.args.check_mode !== false && task.args.check_mode !== 'no') {
+          return {
+            status: 'ok',
+            payload: {
+              changed: false,
+              skipped: true,
+              cmd,
+              rc: 0,
+              stdout: `[DRY RUN] Command skipped in check mode: "${cmd}"`,
+              stderr: '',
+              msg: `[DRY RUN] Command skipped in check mode: "${cmd}"`
+            }
+          };
+        }
         const res = await this.execScriptOnSession(session, cmd, become);
         if (res.rc !== 0) {
           return {
@@ -899,7 +1035,30 @@ fi
         const mode = task.args.mode;
         const owner = task.args.owner;
 
-        const fileScript = `
+        const fileScript = isDryRun
+          ? `
+P="${pathVal}"
+if [ "${state}" = "directory" ]; then
+  if [ -d "$P" ]; then
+    echo "TASK_RESULT:OK:[DRY RUN] Directory '$P' already exists."
+  else
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Directory '$P' does not exist. Would be created."
+  fi
+elif [ "${state}" = "absent" ]; then
+  if [ -e "$P" ]; then
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Path '$P' exists and would be deleted."
+  else
+    echo "TASK_RESULT:OK:[DRY RUN] Path '$P' does not exist."
+  fi
+else
+  if [ -f "$P" ]; then
+    echo "TASK_RESULT:OK:[DRY RUN] File '$P' exists."
+  else
+    echo "TASK_RESULT:CHANGED:[DRY RUN] File '$P' does not exist. Would be created."
+  fi
+fi
+`
+          : `
 P="${pathVal}"
 if [ "${state}" = "directory" ]; then
   mkdir -p "$P"
@@ -913,13 +1072,14 @@ if [ -n "${owner || ''}" ]; then chown "${owner}" "$P"; fi
 echo "TASK_RESULT:CHANGED:File state ensured."
 `;
         const res = await this.execScriptOnSession(session, fileScript, become);
+        const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
         return {
-          status: res.rc === 0 ? 'changed' : 'failed',
+          status: res.rc === 0 ? (isChanged ? 'changed' : 'ok') : 'failed',
           payload: {
-            changed: res.rc === 0,
+            changed: isChanged,
             rc: res.rc,
             path: pathVal,
-            msg: res.rc === 0 ? 'File state verified.' : res.stderr
+            msg: res.rc === 0 ? (isChanged ? 'File state would be modified.' : 'File state verified.') : res.stderr
           }
         };
       }
@@ -954,7 +1114,29 @@ fi
           return { status: 'failed', payload: { failed: true, msg: 'Package task missing parameter: name' } };
         }
         const state = task.args.state || 'present';
-        const pkgScript = `
+        const pkgScript = isDryRun
+          ? `
+PKG="${pkgName}"
+STATE="${state}"
+INSTALLED=0
+if rpm -q "$PKG" >/dev/null 2>&1 || (command -v dpkg >/dev/null 2>&1 && dpkg -l "$PKG" 2>/dev/null | grep -q "^ii.*$PKG"); then
+  INSTALLED=1
+fi
+if [ "$STATE" = "absent" ]; then
+  if [ "$INSTALLED" -eq 1 ]; then
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Package '$PKG' is installed. Would be removed."
+  else
+    echo "TASK_RESULT:OK:[DRY RUN] Package '$PKG' is not installed."
+  fi
+else
+  if [ "$INSTALLED" -eq 1 ]; then
+    echo "TASK_RESULT:OK:[DRY RUN] Package '$PKG' is already installed."
+  else
+    echo "TASK_RESULT:CHANGED:[DRY RUN] Package '$PKG' is not installed. Would be installed."
+  fi
+fi
+`
+          : `
 PKG="${pkgName}"
 STATE="${state}"
 MGR="apt-get"
@@ -997,7 +1179,16 @@ fi
         const owner = task.args.owner || '';
         const group = task.args.group || '';
         const b64 = Buffer.from(content, 'utf8').toString('base64');
-        const copyScript = `
+        const copyScript = isDryRun
+          ? `
+DEST="${dest}"
+if [ ! -f "$DEST" ]; then
+  echo "TASK_RESULT:CHANGED:[DRY RUN] Destination file '$DEST' does not exist. Would be created."
+else
+  echo "TASK_RESULT:CHANGED:[DRY RUN] Destination file '$DEST' exists. Would be verified/updated."
+fi
+`
+          : `
 DEST="${dest}"
 DIR=$(dirname "$DEST")
 mkdir -p "$DIR"
@@ -1011,7 +1202,8 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
         if (res.rc !== 0) {
           return { status: 'failed', payload: { failed: true, rc: res.rc, msg: res.stderr || res.stdout } };
         }
-        return { status: 'changed', payload: { changed: true, dest, rc: 0 } };
+        const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
+        return { status: isChanged ? 'changed' : 'ok', payload: { changed: isChanged, dest, rc: 0 } };
       }
 
       // 10. Generic Service, Systemd, or UFW
@@ -1020,17 +1212,33 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
         if (mod === 'service' || mod === 'systemd') {
           const sName = task.args.name;
           const sState = task.args.state || 'status';
-          cmd = `systemctl ${sState} ${sName} 2>/dev/null || true`;
+          if (isDryRun) {
+            cmd = `
+SNAME="${sName}"
+SSTATE="${sState}"
+if systemctl is-active "$SNAME" >/dev/null 2>&1; then ACTIVE=1; else ACTIVE=0; fi
+if [ "$SSTATE" = "started" ] && [ "$ACTIVE" -eq 0 ]; then
+  echo "TASK_RESULT:CHANGED:[DRY RUN] Service '$SNAME' is inactive. Would be started."
+elif [ "$SSTATE" = "stopped" ] && [ "$ACTIVE" -eq 1 ]; then
+  echo "TASK_RESULT:CHANGED:[DRY RUN] Service '$SNAME' is active. Would be stopped."
+else
+  echo "TASK_RESULT:OK:[DRY RUN] Service '$SNAME' state matches ($SSTATE)."
+fi
+`;
+          } else {
+            cmd = `systemctl ${sState} ${sName} 2>/dev/null || true`;
+          }
         } else {
           cmd = `ufw status verbose 2>/dev/null || true`;
         }
         const res = await this.execScriptOnSession(session, cmd, become);
+        const isChanged = res.stdout.includes('TASK_RESULT:CHANGED:');
         return {
-          status: 'ok',
+          status: isChanged ? 'changed' : 'ok',
           payload: {
-            changed: false,
+            changed: isChanged,
             rc: res.rc,
-            msg: `Service / firewall state verified: ${res.stdout || 'ok'}`
+            msg: `Service / firewall state: ${res.stdout || 'ok'}`
           }
         };
       }
@@ -1159,18 +1367,24 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
       return manifest;
     }
 
+    const isDryRun = Boolean(req.checkMode ?? req.dryRun);
+    manifest.check_mode = isDryRun;
+    manifest.dry_run = isDryRun;
+
     // 2. Start Execution
     manifest.started_at = new Date().toISOString();
     onEvent({
       runId,
       type: 'started',
-      message: `Starting Ansible controlled execution on ${resolvedTargets.length} resolved hosts (Serial=${rollout.serial}, Failure Threshold=${rollout.failure_threshold})...`,
+      message: isDryRun
+        ? `[INIT] Starting Ansible DRY RUN (Check Mode) on ${resolvedTargets.length} resolved hosts (Simulating changes, no system modifications; Serial=${rollout.serial})...`
+        : `[INIT] Starting Ansible controlled execution on ${resolvedTargets.length} resolved hosts (Serial=${rollout.serial}, Failure Threshold=${rollout.failure_threshold})...`,
       manifest
     });
 
     AuditService.getInstance().logEvent({
       eventType: 'automation_started',
-      action: 'ansible_run_started',
+      action: isDryRun ? 'ansible_dry_run_started' : 'ansible_run_started',
       outcome: 'success',
       resourceType: 'automation_run',
       resourceId: runId,
@@ -1179,7 +1393,8 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
       metadata: {
         playbook: req.playbookPath,
         targetCount: resolvedTargets.length,
-        serial: rollout.serial
+        serial: rollout.serial,
+        dryRun: isDryRun
       }
     });
 
@@ -1192,18 +1407,18 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
       runId,
       type: 'play_started',
       progressPercent: 2,
-      message: this.formatAnsibleBanner('PLAY', playbook.playName)
+      message: this.formatAnsibleBanner('PLAY', `${playbook.playName}${isDryRun ? ' [CHECK MODE / DRY RUN]' : ''}`)
     });
 
     let consecutiveFailures = 0;
     let totalFailed = 0;
     const hostRecapMap: Record<
       string,
-      { ok: number; changed: number; unreachable: number; failed: number; durationMs: number }
+      { ok: number; changed: number; unreachable: number; failed: number; skipped: number; durationMs: number }
     > = {};
 
     for (const t of resolvedTargets) {
-      hostRecapMap[t.hostname] = { ok: 0, changed: 0, unreachable: 0, failed: 0, durationMs: 0 };
+      hostRecapMap[t.hostname] = { ok: 0, changed: 0, unreachable: 0, failed: 0, skipped: 0, durationMs: 0 };
     }
 
     // Process targets in serial batches
@@ -1377,7 +1592,10 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
             }
           }
 
-          if (taskStatus === 'failed') {
+          if (resultPayload?.skipped) {
+            hostRecapMap[target.hostname].skipped++;
+            consecutiveFailures = 0;
+          } else if (taskStatus === 'failed') {
             hostRecapMap[target.hostname].failed++;
             totalFailed++;
             consecutiveFailures++;
@@ -1393,7 +1611,9 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
           const durationStr = `(${(taskDurationMs / 1000).toFixed(2)}s)`;
           let formattedLog: string;
 
-          if (taskStatus === 'failed') {
+          if (resultPayload?.skipped) {
+            formattedLog = `skipping: [${target.hostname}] => ${JSON.stringify(resultPayload, null, 4)} ${durationStr}`;
+          } else if (taskStatus === 'failed') {
             formattedLog = `fatal: [${target.hostname}]: FAILED! => ${JSON.stringify(resultPayload, null, 4)} ${durationStr}`;
           } else {
             formattedLog = `${taskStatus}: [${target.hostname}] => ${JSON.stringify(resultPayload, null, 4)} ${durationStr}`;
@@ -1404,11 +1624,13 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
           let sumChanged = 0;
           let sumUnreachable = 0;
           let sumFailed = 0;
+          let sumSkipped = 0;
           for (const s of Object.values(hostRecapMap)) {
             sumOk += s.ok;
             sumChanged += s.changed;
             sumUnreachable += s.unreachable;
             sumFailed += s.failed;
+            sumSkipped += s.skipped;
           }
 
           const taskFinishProgress = Math.min(98, Math.round(((taskIdx + 1) / totalTasks) * 98));
@@ -1417,7 +1639,7 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
             runId,
             type: 'task_finished',
             hostId: target.hostname,
-            status: taskStatus,
+            status: resultPayload?.skipped ? 'ok' : taskStatus,
             taskIndex: taskIdx + 1,
             totalTasks,
             taskName: task.name,
@@ -1429,7 +1651,7 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
               changed: sumChanged,
               unreachable: sumUnreachable,
               failed: sumFailed,
-              skipped: 0
+              skipped: sumSkipped
             },
             message: redactString(formattedLog)
           });
@@ -1500,9 +1722,9 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
     });
 
     for (const target of resolvedTargets) {
-      const stats = hostRecapMap[target.hostname] || { ok: 0, changed: 0, unreachable: 0, failed: 0, durationMs: 0 };
+      const stats = hostRecapMap[target.hostname] || { ok: 0, changed: 0, unreachable: 0, failed: 0, skipped: 0, durationMs: 0 };
       const hostCol = target.hostname.padEnd(26, ' ');
-      const recapLine = `${hostCol} : ok=${stats.ok}    changed=${stats.changed}    unreachable=${stats.unreachable}    failed=${stats.failed}    skipped=0    rescued=0    ignored=0`;
+      const recapLine = `${hostCol} : ok=${stats.ok}    changed=${stats.changed}    unreachable=${stats.unreachable}    failed=${stats.failed}    skipped=${stats.skipped}    rescued=0    ignored=0`;
       onEvent({
         runId,
         type: 'log',
@@ -1611,7 +1833,10 @@ echo "TASK_RESULT:CHANGED:File copied to $DEST."
           const play = Array.isArray(loaded) ? loaded[0] : loaded;
           const playName = play.name ? String(play.name).trim() : 'Custom Fleet Automation';
           const playBecome = Boolean(play.become ?? req.become ?? true);
+          const isDryRun = Boolean(req.checkMode ?? req.dryRun);
           const playVars: Record<string, any> = {
+            ansible_check_mode: isDryRun,
+            check_mode: isDryRun,
             ...(play.vars || {}),
             ...(req.extraVars || {})
           };
