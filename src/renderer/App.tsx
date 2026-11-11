@@ -404,6 +404,32 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleToggleTheme = () => {
+    const currentMode = uiSettings.themeMode || 'dark';
+    const nextMode = currentMode === 'dark' ? 'light' : 'dark';
+    const isLight = nextMode === 'light';
+    const nextPreset = isLight ? APP_THEME_PRESETS['gruvbox-light'] : APP_THEME_PRESETS['gruvbox-material'];
+    const nextSettings: GeneralUiSettings = {
+      ...getGeneralUiSettings(),
+      themeMode: nextMode as 'dark' | 'light',
+      appTheme: isLight ? 'light' : 'windows11',
+      themePreset: nextPreset.id,
+      customBackground: nextPreset.background,
+      customForeground: nextPreset.foreground,
+      customAccent: nextPreset.accent
+    };
+    setUiSettings(nextSettings);
+    saveGeneralUiSettings(nextSettings);
+    if (nextPreset?.terminalThemeId) {
+      const ts = getTerminalSettings();
+      saveTerminalSettings({
+        ...ts,
+        themeId: nextPreset.terminalThemeId,
+        cursorColor: nextPreset.accent
+      });
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -1174,15 +1200,15 @@ export const App: React.FC = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
-        {/* Sidebar */}
+        {/* Full Sidebar (visible when not collapsed) */}
         <div
-          className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative transition-[width,opacity] duration-200 overflow-hidden ${
-          isSidebarCollapsed ? 'w-0 border-r-0 p-0 opacity-0 pointer-events-none' : ''
-        } ${
-          isDraggingSidebar ? 'select-none transition-none' : ''
-        }`}
-        style={{ width: isSidebarCollapsed ? 0 : `${uiSettings.sidebarWidth}px` }}
-      >
+          className={`bg-slate-950 border-r border-slate-800 flex flex-col h-full shrink-0 relative overflow-hidden ${
+            isSidebarCollapsed ? 'hidden' : ''
+          } ${
+            isDraggingSidebar ? 'select-none transition-none' : ''
+          }`}
+          style={{ width: `${uiSettings.sidebarWidth}px` }}
+        >
         {/* Streamlined Studio Sidebar Header: Hosts & Quick Actions (No duplicate app logo) */}
         <div className="px-3 pt-3 pb-2 border-b border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between min-w-0">
@@ -1227,31 +1253,7 @@ export const App: React.FC = () => {
               </button>
 
               <button
-                onClick={() => {
-                  const currentMode = uiSettings.themeMode || 'dark';
-                  const nextMode = currentMode === 'dark' ? 'light' : 'dark';
-                  const isLight = nextMode === 'light';
-                  const nextPreset = isLight ? APP_THEME_PRESETS['gruvbox-light'] : APP_THEME_PRESETS['gruvbox-material'];
-                  const nextSettings: GeneralUiSettings = {
-                    ...getGeneralUiSettings(),
-                    themeMode: nextMode as 'dark' | 'light',
-                    appTheme: isLight ? 'light' : 'windows11',
-                    themePreset: nextPreset.id,
-                    customBackground: nextPreset.background,
-                    customForeground: nextPreset.foreground,
-                    customAccent: nextPreset.accent
-                  };
-                  setUiSettings(nextSettings);
-                  saveGeneralUiSettings(nextSettings);
-                  if (nextPreset?.terminalThemeId) {
-                    const ts = getTerminalSettings();
-                    saveTerminalSettings({
-                      ...ts,
-                      themeId: nextPreset.terminalThemeId,
-                      cursorColor: nextPreset.accent
-                    });
-                  }
-                }}
+                onClick={handleToggleTheme}
                 className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
                 title="Toggle Dark / Light Theme"
               >
@@ -1636,38 +1638,268 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Workspace & Tabs */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 relative">
-        {/* Floating Sidebar Toggle when collapsed in Native Host mode */}
-        {isNativeHost && isSidebarCollapsed && (
-          <div className="absolute top-2 left-2 z-40">
+      {/* Collapsed Icon-Only Activity Rail (Shown when sidebar is collapsed) */}
+      {isSidebarCollapsed && (
+        <div className="w-[50px] bg-slate-950 border-r border-slate-800 flex flex-col items-center py-2 h-full shrink-0 z-20 select-none overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Top: Expand Sidebar & Quick Actions */}
+          <div className="flex flex-col items-center gap-1 pb-2 border-b border-slate-800/80 w-full px-1">
             <button
               onClick={toggleSidebarCollapse}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-sky-500/50 text-slate-300 hover:text-white text-xs font-semibold shadow-lg transition cursor-pointer backdrop-blur-sm"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-sky-400 hover:bg-slate-900 transition cursor-pointer"
               title="Expand Left Sidebar (Ctrl+B)"
             >
-              <PanelLeftOpen className="w-3.5 h-3.5 text-sky-400" />
-              <span>Sidebar</span>
+              <PanelLeftOpen className="w-4 h-4 text-sky-400" />
+            </button>
+
+            <button
+              onClick={() => { setEditingProfile(null); setShowProfileModal(true); }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-slate-900 transition cursor-pointer"
+              title="Add New Host Profile"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setShowQuickConnectModal(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-sky-400 hover:text-sky-300 hover:bg-slate-900 transition cursor-pointer"
+              title="Quick Connect (Ctrl+K)"
+            >
+              <Zap className="w-4 h-4" />
             </button>
           </div>
-        )}
 
+          {/* Navigation Tabs */}
+          <div className="flex flex-col items-center gap-1 py-2 border-b border-slate-800/80 w-full px-1">
+            {/* Hosts / Profiles (Click to expand sidebar) */}
+            <button
+              onClick={toggleSidebarCollapse}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-900 transition cursor-pointer"
+              title="Hosts & Profiles (Click to expand)"
+            >
+              <Server className="w-4 h-4 text-slate-400 hover:text-white" />
+            </button>
+
+            {/* Overview / Dashboard */}
+            <button
+              onClick={handleOpenDashboard}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'dashboard'
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Overview Dashboard"
+            >
+              {activeTab?.type === 'dashboard' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-sky-400 rounded-r" />
+              )}
+              <LayoutDashboard className="w-4 h-4" />
+            </button>
+
+            {/* Ansible Hub */}
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-ansible', type: 'ansible' as const, title: 'Ansible Fleet Hub' };
+                if (!tabs.some((t) => t.id === 'tab-ansible')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-ansible');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'ansible'
+                  ? 'bg-sky-500/20 text-indigo-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-900'
+              }`}
+              title="Ansible Fleet Hub"
+            >
+              {activeTab?.type === 'ansible' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-indigo-400 rounded-r" />
+              )}
+              <Sliders className="w-4 h-4 text-indigo-400" />
+            </button>
+
+            {/* Password Vault */}
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-vault', type: 'vault' as const, title: 'Password Vault' };
+                if (!tabs.some((t) => t.id === 'tab-vault')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-vault');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'vault'
+                  ? 'bg-sky-500/20 text-amber-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-amber-400 hover:bg-slate-900'
+              }`}
+              title="Password Vault"
+            >
+              {activeTab?.type === 'vault' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-400 rounded-r" />
+              )}
+              <Key className="w-4 h-4 text-amber-400" />
+            </button>
+
+            {/* Port Forwarding & Tunnels */}
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-tunnels', type: 'tunnels' as const, title: 'Port Forwarding & Tunnels' };
+                if (!tabs.some((t) => t.id === 'tab-tunnels')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-tunnels');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'tunnels'
+                  ? 'bg-sky-500/20 text-purple-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-purple-400 hover:bg-slate-900'
+              }`}
+              title="Port Forwarding & Tunnels"
+            >
+              {activeTab?.type === 'tunnels' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-purple-400 rounded-r" />
+              )}
+              <Network className="w-4 h-4 text-purple-400" />
+            </button>
+
+            {/* Host Trust Store */}
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-trust', type: 'trust' as const, title: 'Host Trust Store' };
+                if (!tabs.some((t) => t.id === 'tab-trust')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-trust');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'trust'
+                  ? 'bg-sky-500/20 text-emerald-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-900'
+              }`}
+              title="Host Trust Store"
+            >
+              {activeTab?.type === 'trust' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-emerald-400 rounded-r" />
+              )}
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            </button>
+
+            {/* ISO 27001 Audit Logs */}
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-audit', type: 'audit' as const, title: 'ISO 27001 Audit Logs' };
+                if (!tabs.some((t) => t.id === 'tab-audit')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-audit');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'audit'
+                  ? 'bg-sky-500/20 text-amber-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-amber-400 hover:bg-slate-900'
+              }`}
+              title="ISO 27001 Audit Logs"
+            >
+              {activeTab?.type === 'audit' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-400 rounded-r" />
+              )}
+              <Lock className="w-4 h-4 text-amber-400" />
+            </button>
+          </div>
+
+          {/* Quick Tools */}
+          <div className="flex flex-col items-center gap-1 py-2 w-full px-1">
+            <button
+              onClick={() => setShowRunbookRunner(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-sky-400 hover:bg-slate-900 transition cursor-pointer"
+              title="Runbooks"
+            >
+              <PlaySquare className="w-4 h-4 text-sky-400" />
+            </button>
+
+            <button
+              onClick={() => setShowConfigDrift(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-cyan-400 hover:bg-slate-900 transition cursor-pointer"
+              title="Config Drift"
+            >
+              <GitCompare className="w-4 h-4 text-cyan-400" />
+            </button>
+
+            <button
+              onClick={() => setShowBatchPush(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-teal-400 hover:bg-slate-900 transition cursor-pointer"
+              title="Fleet Push"
+            >
+              <UploadCloud className="w-4 h-4 text-teal-400" />
+            </button>
+
+            <button
+              onClick={() => setShowGlobalSnippets(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-yellow-400 hover:bg-slate-900 transition cursor-pointer"
+              title="Snippets"
+            >
+              <Code className="w-4 h-4 text-yellow-400" />
+            </button>
+
+            <button
+              onClick={() => setShowUptimeMonitor(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition cursor-pointer"
+              title="Uptime Monitor"
+            >
+              <Activity className="w-4 h-4 text-rose-400" />
+            </button>
+
+            <button
+              onClick={() => {
+                setMobaToolsInitialTab('x11');
+                setShowMobaTools(true);
+              }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-slate-900 transition cursor-pointer"
+              title="X11 &amp; RDP Tools"
+            >
+              <Monitor className="w-4 h-4 text-indigo-400" />
+            </button>
+
+            <button
+              onClick={() => setShowBreakGlass(true)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition cursor-pointer"
+              title="JIT Break-Glass Access"
+            >
+              <Flame className="w-4 h-4 text-rose-400" />
+            </button>
+          </div>
+
+          {/* Bottom Actions: Theme & Settings */}
+          <div className="mt-auto flex flex-col items-center gap-1 pt-2 border-t border-slate-800/80 w-full px-1">
+            <button
+              onClick={handleToggleTheme}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-900 transition cursor-pointer"
+              title="Toggle Dark / Light Theme"
+            >
+              {(uiSettings.themeMode || 'dark') === 'dark' ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                const tab = { id: 'tab-settings', type: 'settings' as const, title: 'Governance & Settings' };
+                if (!tabs.some((t) => t.id === 'tab-settings')) setTabs([...tabs, tab]);
+                setActiveTabId('tab-settings');
+              }}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition cursor-pointer relative ${
+                activeTab?.type === 'settings'
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/50'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Governance & Settings"
+            >
+              {activeTab?.type === 'settings' && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-sky-400 rounded-r" />
+              )}
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Workspace & Tabs */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 relative">
         {/* Windows 11 CommandBar / Workspace Action Strip (Hidden in Native WPF Host where Toolbar Ribbon is native) */}
         {!isNativeHost && (
         <div className="h-9 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 shrink-0 relative z-40 select-none">
           <div className="flex items-center gap-2">
-            {/* Expand Sidebar Toggle (shown when collapsed) */}
-            {isSidebarCollapsed && (
-              <button
-                onClick={toggleSidebarCollapse}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
-                title="Expand Left Sidebar (Ctrl+B)"
-              >
-                <PanelLeftOpen className="w-3.5 h-3.5 text-sky-400" />
-                <span>Sidebar</span>
-              </button>
-            )}
-
             {/* Quick Connect Action */}
             <button
               onClick={() => setShowQuickConnectModal(true)}
